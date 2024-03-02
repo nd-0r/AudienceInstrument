@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "B4E2C653-42EC-4BAC-A32D-480329EDAAE2"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "5BC0815E-E75E-4C4D-9E1F-A87CC6468A6D"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SWIMNet/WatchableDictionary.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "67"
+            endingLineNumber = "67"
+            landmarkName = "subscript(key:)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "5BC0815E-E75E-4C4D-9E1F-A87CC6468A6D - 7d482d0cf2312031"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SWIMNet.WatchableDictionary.subscript.setter : (&#x3c4;_0_0) -&gt; Swift.Optional&lt;&#x3c4;_0_1&gt;"
+                  moduleName = "SWIMNet"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/andreworals/Documents/Dev/audience-instrument/app/SWIMNet/SWIMNet/WatchableDictionary.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "67"
+                  endingLineNumber = "67"
+                  offsetFromSymbolStart = "433">
+               </Location>
+               <Location
+                  uuid = "5BC0815E-E75E-4C4D-9E1F-A87CC6468A6D - 7d482d0cf2312010"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SWIMNet.WatchableDictionary.subscript.setter : (&#x3c4;_0_0) -&gt; Swift.Optional&lt;&#x3c4;_0_1&gt;"
+                  moduleName = "SWIMNet"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/andreworals/Documents/Dev/audience-instrument/app/SWIMNet/SWIMNet/WatchableDictionary.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "68"
+                  endingLineNumber = "68"
+                  offsetFromSymbolStart = "491">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "C5220B60-A720-4E03-BDFE-232B040C30FF"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SWIMNet/DistanceVectorRouter.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "148"
+            endingLineNumber = "148"
+            landmarkName = "updateLinkCost(linkId:newCost:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>
