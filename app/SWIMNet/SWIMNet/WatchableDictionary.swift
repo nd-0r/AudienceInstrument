@@ -62,13 +62,19 @@ class WatchableDictionary<K: Hashable & Comparable & Sendable, V: Sendable>: Wat
         } set {
             // if newValue is nil then about to remove key
             dict[key] = newValue
-            updates += 1
-
-            if updates > updateThreshold {
-                defer { updates = 0 }
-                _ = didUpdateCallback.didUpdate()
-            }
+            update()
         }
+    }
+
+    func batchUpdate(keyValuePairs: [(K, V)]) -> Void {
+        guard !keyValuePairs.isEmpty else {
+            return
+        }
+
+        for (key, value) in keyValuePairs {
+            dict[key] = value
+        }
+        update()
     }
 
     func next() -> (K, V)? {
@@ -78,5 +84,14 @@ class WatchableDictionary<K: Hashable & Comparable & Sendable, V: Sendable>: Wat
         }
 
         return dictIter!.next()
+    }
+
+    private func update() {
+        updates += 1
+
+        if updates > updateThreshold {
+            didUpdateCallback.didUpdate()
+            updates = 0
+        }
     }
 }
