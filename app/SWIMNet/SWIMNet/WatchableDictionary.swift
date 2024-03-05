@@ -24,6 +24,7 @@ protocol WatchableDictionaryProtocol: Sequence, IteratorProtocol {
 
 class WatchableDictionary<K: Hashable & Comparable & Sendable, V: Sendable>: WatchableDictionaryProtocol {
     typealias Element = (K, V)
+    typealias Dict = Dictionary<K, V>
 
     private struct DefaultDidUpdateCallback: DidUpdateCallbackProtocol {
         func didUpdate() -> Void { }

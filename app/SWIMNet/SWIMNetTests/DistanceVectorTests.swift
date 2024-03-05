@@ -10,13 +10,14 @@ import XCTest
 @testable import SWIMNet
 
 final class DistanceVectorNodeTests: XCTestCase {
-    let mockSendDelegate = mock(SendDelegate.self)
-    var dVNode: DistanceVectorRoutingNode<String, SendDelegateMock>?
     private typealias NodeID = String
-    private typealias DVDict = Dictionary<NodeID, ForwardingEntry<NodeID>>
+    private typealias DVDict = Dictionary<NodeID, ForwardingEntry<NodeID, Cost>>
+    typealias Cost = UInt8
+    let mockSendDelegate = mock(SendDelegate.self)
+    var dVNode: DistanceVectorRoutingNode<String, Cost, SendDelegateMock>?
 
     override func setUpWithError() throws {
-        dVNode = DistanceVectorRoutingNode<NodeID, SendDelegateMock>.init(
+        dVNode = DistanceVectorRoutingNode<NodeID, Cost, SendDelegateMock>.init(
             selfId: "A",
             linkUpdateThreshold: 0,
             dvUpdateThreshold: 0,
@@ -213,7 +214,7 @@ final class DistanceVectorNodeTests: XCTestCase {
         let dVFrom_B2: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 5),
             "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: CostT.max)
+            "C": ForwardingEntry(linkId: "C", cost: Cost.max)
         ]
         dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -264,7 +265,7 @@ final class DistanceVectorNodeTests: XCTestCase {
         let dVFrom_B2: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 5),
             "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: CostT.max)
+            "C": ForwardingEntry(linkId: "C", cost: Cost.max)
         ]
         dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -274,7 +275,7 @@ final class DistanceVectorNodeTests: XCTestCase {
         let expectedDVTo_Neighbors: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 0),
             "B": ForwardingEntry(linkId: "B", cost: 5),
-            "C": ForwardingEntry(linkId: "B", cost: CostT.max),
+            "C": ForwardingEntry(linkId: "B", cost: Cost.max),
             "D": ForwardingEntry(linkId: "D", cost: 3)
         ]
 
@@ -326,8 +327,8 @@ final class DistanceVectorNodeTests: XCTestCase {
 
         let expectedDVTo_Neighbors: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 0),
-            "B": ForwardingEntry(linkId: "B", cost: CostT.max),
-            "C": ForwardingEntry(linkId: "B", cost: CostT.max),
+            "B": ForwardingEntry(linkId: "B", cost: Cost.max),
+            "C": ForwardingEntry(linkId: "B", cost: Cost.max),
             "D": ForwardingEntry(linkId: "D", cost: 3)
         ]
 

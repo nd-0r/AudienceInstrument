@@ -8,16 +8,23 @@
 import Foundation
 
 typealias PeerIdT = Sendable & Comparable & Hashable
-typealias CostT = UInt8
 
-struct ForwardingEntry<PeerId: PeerIdT>: Sendable, Equatable {
+protocol UIntLike {}
+extension UInt: UIntLike {}
+extension UInt8: UIntLike {}
+extension UInt16: UIntLike {}
+extension UInt32: UIntLike {}
+extension UInt64: UIntLike {}
+typealias CostT = UIntLike & UnsignedInteger & FixedWidthInteger & Sendable
+
+struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>: Sendable, Equatable {
     var linkId: PeerId
-    var cost: CostT
+    var cost: Cost
 
     static func computeForwardingEntry(
         fromNeighbor peerId: PeerId,
         toPeer destId: PeerId,
-        withCost cost: CostT,
+        withCost cost: Cost,
         givenExistingEntry forwardingEntry: ForwardingEntry?
     ) -> ForwardingEntry? {
         guard forwardingEntry != nil else {
@@ -37,7 +44,7 @@ struct ForwardingEntry<PeerId: PeerIdT>: Sendable, Equatable {
         return nil // Did not update anything
     }
 
-    init(linkId: PeerId, cost: CostT) {
+    init(linkId: PeerId, cost: Cost) {
         self.linkId = linkId
         self.cost = cost
     }
@@ -53,14 +60,15 @@ protocol SendDelegate {
 // TODO handle removing neighbors
 class DistanceVectorRoutingNode<
     PeerId: PeerIdT,
+    Cost: CostT,
     SendDelegateClass: SendDelegate
 > {
-    typealias DistanceVector = WatchableDictionary<PeerId, ForwardingEntry<PeerId>>
-    typealias DistanceVectorDict = [PeerId:ForwardingEntry<PeerId>]
-    typealias LinkCosts = [PeerId:CostT]
+    private typealias DVEnt = ForwardingEntry<PeerId, Cost>
+    internal typealias DistanceVector = WatchableDictionary<PeerId, ForwardingEntry<PeerId, Cost>>
+    typealias LinkCosts = [PeerId:Cost]
 
     private struct WatchableDictionaryUpdateDelegate: DidUpdateCallbackProtocol {
-        var owner: DistanceVectorRoutingNode<PeerId, SendDelegateClass>
+        var owner: DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>
         func didUpdate() -> Void {
             // Values have to be captured explicitly so that they are passed by value
             owner.distanceVectorSenderQueue.async { [
@@ -111,7 +119,7 @@ class DistanceVectorRoutingNode<
         linkCosts: LinkCosts,
         sendDelegate: SendDelegateClass
     ) {
-        var backingDict: DistanceVectorDict = [
+        var backingDict: DistanceVector.Dict = [
             selfId: ForwardingEntry(linkId: selfId, cost: 0),
         ]
 
@@ -135,20 +143,20 @@ class DistanceVectorRoutingNode<
 
     func recvDistanceVector(
         fromNeighbor peerId: PeerId,
-        withDistanceVector peerDv: DistanceVectorDict
+        withDistanceVector peerDv: DistanceVector.Dict
     ) {
-        var updates: [(PeerId, ForwardingEntry<PeerId>)] = []
+        var updates: [(PeerId, DVEnt)] = []
         for (destId, peerForwardingEntry) in peerDv {
             let candidate_cost = peerForwardingEntry.cost
 
-            guard candidate_cost != CostT.max else {
+            guard candidate_cost != Cost.max else {
                 let linkCostDirectToDest = linkCosts[destId]
                 if linkCostDirectToDest != nil {
                     // can still reach host through direct link
                     updates.append((destId, ForwardingEntry(linkId: destId, cost: linkCostDirectToDest!)))
                 } else {
                     // can't reach host, insert tombstone
-                    updates.append((destId, ForwardingEntry(linkId: peerId, cost: CostT.max)))
+                    updates.append((destId, ForwardingEntry(linkId: peerId, cost: Cost.max)))
                 }
                 continue
             }
@@ -176,15 +184,15 @@ class DistanceVectorRoutingNode<
         distanceVector.batchUpdate(keyValuePairs: updates)
     }
 
-    func updateLinkCost(linkId: PeerId, newCost: CostT?) {
+    func updateLinkCost(linkId: PeerId, newCost: Cost?) {
         linkCosts[linkId] = newCost
 
         guard newCost != nil else {
-            var updates: [(PeerId, ForwardingEntry<PeerId>)] = []
+            var updates: [(PeerId, DVEnt)] = []
             for (destId, forwardingEntry) in self.distanceVector {
                 if forwardingEntry.linkId == linkId {
                     // Tombstone the destination because the neighbor is unreachable
-                    updates.append((destId, ForwardingEntry(linkId: linkId, cost: CostT.max)))
+                    updates.append((destId, ForwardingEntry(linkId: linkId, cost: Cost.max)))
                 }
             }
             distanceVector.batchUpdate(keyValuePairs: updates)
@@ -208,7 +216,7 @@ class DistanceVectorRoutingNode<
 
     private func sendDistanceVectorToPeers(
         toNeighbors neighbors: [PeerId],
-        withDistanceVector dv: DistanceVectorDict,
+        withDistanceVector dv: DistanceVector.Dict,
         withSendDelegate sd: SendDelegateClass
     ) async throws {
         for peerId in neighbors {
