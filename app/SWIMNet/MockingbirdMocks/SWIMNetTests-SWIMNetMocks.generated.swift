@@ -68,12 +68,12 @@ public final class SendDelegateMock: SWIMNet.SendDelegate, Mockingbird.Mock {
     SendDelegateMock.mockingbirdContext.sourceLocation = sourceLocation
   }
 
-  // MARK: Mocked `send`(sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable)
-  public func `send`(sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void {
-    return try await self.mockingbirdContext.mocking.didInvoke(Mockingbird.SwiftInvocation(selectorName: "`send`(sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void", selectorType: Mockingbird.SelectorType.method, arguments: [Mockingbird.ArgumentMatcher(`peerId`), Mockingbird.ArgumentMatcher(`dv`)], returnType: Swift.ObjectIdentifier((Void).self))) {
+  // MARK: Mocked `send`(`from`: any PeerIdT, sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable)
+  public func `send`(`from`: any PeerIdT, sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void {
+    return try await self.mockingbirdContext.mocking.didInvoke(Mockingbird.SwiftInvocation(selectorName: "`send`(`from`: any PeerIdT, sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void", selectorType: Mockingbird.SelectorType.method, arguments: [Mockingbird.ArgumentMatcher(`from`), Mockingbird.ArgumentMatcher(`peerId`), Mockingbird.ArgumentMatcher(`dv`)], returnType: Swift.ObjectIdentifier((Void).self))) {
       self.mockingbirdContext.recordInvocation($0)
       let mkbImpl = self.mockingbirdContext.stubbing.implementation(for: $0)
-      if let mkbImpl = mkbImpl as? (any PeerIdT, any Sendable) async throws -> Void { return try await mkbImpl(`peerId`, `dv`) }
+      if let mkbImpl = mkbImpl as? (any PeerIdT, any PeerIdT, any Sendable) async throws -> Void { return try await mkbImpl(`from`, `peerId`, `dv`) }
       if let mkbImpl = mkbImpl as? () async throws -> Void { return try await mkbImpl() }
       for mkbTargetBox in self.mockingbirdContext.proxy.targets(for: $0) {
         switch mkbTargetBox.target {
@@ -81,7 +81,7 @@ public final class SendDelegateMock: SWIMNet.SendDelegate, Mockingbird.Mock {
           break
         case .object(let mkbObject):
           guard var mkbObject = mkbObject as? MockingbirdSupertype else { break }
-          let mkbValue: Void = try await mkbObject.`send`(sendTo: `peerId`, withDVDict: `dv`)
+          let mkbValue: Void = try await mkbObject.`send`(from: `from`, sendTo: `peerId`, withDVDict: `dv`)
           self.mockingbirdContext.proxy.updateTarget(&mkbObject, in: mkbTargetBox)
           return mkbValue
         }
@@ -91,8 +91,8 @@ public final class SendDelegateMock: SWIMNet.SendDelegate, Mockingbird.Mock {
     }
   }
 
-  public func `send`(sendTo `peerId`: @autoclosure () -> any PeerIdT, withDVDict `dv`: @autoclosure () -> any Sendable) async -> Mockingbird.Mockable<Mockingbird.ThrowingAsyncFunctionDeclaration, (any PeerIdT, any Sendable) async throws -> Void, Void> {
-    return Mockingbird.Mockable<Mockingbird.ThrowingAsyncFunctionDeclaration, (any PeerIdT, any Sendable) async throws -> Void, Void>(context: self.mockingbirdContext, invocation: Mockingbird.SwiftInvocation(selectorName: "`send`(sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void", selectorType: Mockingbird.SelectorType.method, arguments: [Mockingbird.resolve(`peerId`), Mockingbird.resolve(`dv`)], returnType: Swift.ObjectIdentifier((Void).self)))
+  public func `send`(`from`: @autoclosure () -> any PeerIdT, sendTo `peerId`: @autoclosure () -> any PeerIdT, withDVDict `dv`: @autoclosure () -> any Sendable) async -> Mockingbird.Mockable<Mockingbird.ThrowingAsyncFunctionDeclaration, (any PeerIdT, any PeerIdT, any Sendable) async throws -> Void, Void> {
+    return Mockingbird.Mockable<Mockingbird.ThrowingAsyncFunctionDeclaration, (any PeerIdT, any PeerIdT, any Sendable) async throws -> Void, Void>(context: self.mockingbirdContext, invocation: Mockingbird.SwiftInvocation(selectorName: "`send`(`from`: any PeerIdT, sendTo `peerId`: any PeerIdT, withDVDict `dv`: any Sendable) async throws -> Void", selectorType: Mockingbird.SelectorType.method, arguments: [Mockingbird.resolve(`from`), Mockingbird.resolve(`peerId`), Mockingbird.resolve(`dv`)], returnType: Swift.ObjectIdentifier((Void).self)))
   }
 }
 

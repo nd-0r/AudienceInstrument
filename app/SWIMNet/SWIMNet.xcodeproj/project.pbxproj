@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		6B1FEFD12B8E98BB00F54505 /* WatchableDictionaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1FEFD02B8E98BB00F54505 /* WatchableDictionaryTests.swift */; };
+		6B6C0A692B96ECD200F3274F /* SwiftGraph in Frameworks */ = {isa = PBXBuildFile; productRef = 6B6C0A682B96ECD200F3274F /* SwiftGraph */; };
 		6B70EC142B86B8A0007C4772 /* DistanceVectorRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B70EC132B86B8A0007C4772 /* DistanceVectorRouter.swift */; };
 		6B70EC172B8BD2E4007C4772 /* Mockingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 6B70EC162B8BD2E4007C4772 /* Mockingbird */; };
 		6B70EC192B8BDD36007C4772 /* WatchableDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B70EC182B8BDD36007C4772 /* WatchableDictionary.swift */; };
@@ -60,6 +61,7 @@
 			files = (
 				6B70EC172B8BD2E4007C4772 /* Mockingbird in Frameworks */,
 				6BCC8DF52B7307D500683238 /* SWIMNet.framework in Frameworks */,
+				6B6C0A692B96ECD200F3274F /* SwiftGraph in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,6 +178,7 @@
 			name = SWIMNetTests;
 			packageProductDependencies = (
 				6B70EC162B8BD2E4007C4772 /* Mockingbird */,
+				6B6C0A682B96ECD200F3274F /* SwiftGraph */,
 			);
 			productName = SWIMNetTests;
 			productReference = 6BCC8DF42B7307D500683238 /* SWIMNetTests.xctest */;
@@ -211,6 +214,7 @@
 			packageReferences = (
 				6B7CE36B2B788ED900457DE4 /* XCRemoteSwiftPackageReference "swift-cluster-membership" */,
 				6B70EC152B8BD2E4007C4772 /* XCRemoteSwiftPackageReference "mockingbird" */,
+				6B6C0A672B96ECD200F3274F /* XCRemoteSwiftPackageReference "SwiftGraph" */,
 			);
 			productRefGroup = 6BCC8DEB2B7307D500683238 /* Products */;
 			projectDirPath = "";
@@ -563,6 +567,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		6B6C0A672B96ECD200F3274F /* XCRemoteSwiftPackageReference "SwiftGraph" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/davecom/SwiftGraph";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.1.0;
+			};
+		};
 		6B70EC152B8BD2E4007C4772 /* XCRemoteSwiftPackageReference "mockingbird" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/birdrides/mockingbird";
@@ -582,6 +594,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6B6C0A682B96ECD200F3274F /* SwiftGraph */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6B6C0A672B96ECD200F3274F /* XCRemoteSwiftPackageReference "SwiftGraph" */;
+			productName = SwiftGraph;
+		};
 		6B70EC162B8BD2E4007C4772 /* Mockingbird */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6B70EC152B8BD2E4007C4772 /* XCRemoteSwiftPackageReference "mockingbird" */;
