@@ -16,6 +16,55 @@ func logMessage(_ message: String, to output: FileHandle) {
     }
 }
 
+// From https://gist.github.com/nestserau/ce8f5e5d3f68781732374f7b1c352a5a
+public final class AtomicTimedInteger {
+    
+    private let lock = DispatchSemaphore(value: 1)
+    private var _value: Int
+    private var _last_set_time: DispatchTime
+    
+    public init(value initialValue: Int = 0) {
+        _value = initialValue
+        _last_set_time = DispatchTime.now()
+    }
+    
+    public var value: Int {
+        get {
+            lock.wait()
+            defer { lock.signal() }
+            return _value
+        }
+        set {
+            lock.wait()
+            defer { lock.signal() }
+            _last_set_time = DispatchTime.now()
+            _value = newValue
+        }
+    }
+
+    public var setInterval: UInt64 {
+        get {
+            lock.wait()
+            defer { lock.signal() }
+            return DispatchTime.now().uptimeNanoseconds - _last_set_time.uptimeNanoseconds
+        }
+    }
+    
+    public func decrementAndGet() -> Int {
+        lock.wait()
+        defer { lock.signal() }
+        _value -= 1
+        return _value
+    }
+    
+    public func incrementAndGet() -> Int {
+        lock.wait()
+        defer { lock.signal() }
+        _value += 1
+        return _value
+    }
+}
+
 
 final class DistanceVectorNodeTests: XCTestCase {
     private typealias NodeID = String
@@ -395,6 +444,8 @@ where NodeId: PeerIdT & Decodable & Encodable,
                 return
             }
 
+            _ = owner!.gossips.incrementAndGet()
+
             await owner!.dVNodes[peerId as! NodeId]!.recvDistanceVector(
                 fromNeighbor: from as! NodeId,
                 withDistanceVector: dv as! Dictionary<NodeId, ForwardingEntry<NodeId, Cost>>
@@ -410,6 +461,8 @@ where NodeId: PeerIdT & Decodable & Encodable,
     typealias DVNode = DistanceVectorRoutingNode<NodeId, Cost, SendDelegateMock>
     var dVNodes: [NodeId:DVNode] = [:]
     var sendDelegateMock: SendDelegateMock
+    private var gossips = AtomicTimedInteger(value: 0)
+    private var magicNumGossips = 0
 
 
     init(networkGraph: WeightedGraph<NodeId, Cost>) async {
@@ -417,6 +470,10 @@ where NodeId: PeerIdT & Decodable & Encodable,
 
         sendDelegateMock = SendDelegateMock()
         sendDelegateMock.owner = self
+        let n = networkGraph.vertices.count
+        let c = 3
+        // Prof. Gupta CS425 L5 FA22
+        magicNumGossips = n * c * Int(ceil(log2(Double(n))))
  
         for nodeId in networkGraph.vertices {
             // Because each node can communicate with itself
@@ -445,14 +502,6 @@ where NodeId: PeerIdT & Decodable & Encodable,
                 await dVNodes[vVertex]!.updateLinkCost(linkId: uVertex, newCost: edge.weight)
             }
         }
-
-//        await withTaskGroup(of: Void.self, body: { group in
-//            for nodeId in networkGraph.vertices {
-//                group.addTask(operation: {
-//                    await self.dVNodes[nodeId]!.sendDistanceVectorToPeers()
-//                })
-//            }
-//        })
     }
 
     func updateLinkCost(source: NodeId, dest: NodeId, newCost: Cost?) async {
@@ -467,7 +516,11 @@ where NodeId: PeerIdT & Decodable & Encodable,
         })!
 
         if newCost == nil {
-            networkGraph.removeEdge(currEdge)
+            networkGraph.removeAllEdges(
+                from: sourceId,
+                to: destId,
+                bidirectional: !currEdge.directed
+            )
         } else {
             networkGraph.edges[sourceId][destId].weight = newCost!
         }
@@ -555,6 +608,28 @@ where NodeId: PeerIdT & Decodable & Encodable,
         }
     }
 
+    func converge() async throws {
+//        await withTaskGroup(of: Void.self, body: { group in
+//            for nodeId in networkGraph.vertices {
+//                group.addTask(operation: {
+//                    await self.dVNodes[nodeId]!.sendDistanceVectorToPeers()
+//                })
+//            }
+//        })
+
+        // sorry... I couldn't figure out a better way.
+        var setInterval = gossips.setInterval
+        while (setInterval < 2_000_000_000) {
+            try await Task.sleep(nanoseconds: 100000000)
+            setInterval = gossips.setInterval
+        }
+
+        logMessage("Time between last 2 messages sent until convergence: \(Double(setInterval) / 1_000_000_000)\n", to: .standardError)
+        logMessage("Number of gossips sent until convergence: \(gossips.value)\n", to: .standardError)
+
+        gossips.value = 0
+    }
+
     private func dijkstraPathDictBFS(
         start: NodeId,
         dijkstraPathDict pathDict: [Int:WeightedEdge<Cost>]
@@ -638,7 +713,8 @@ final class DistanceVectorNetworkTests: XCTestCase {
 
         let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
 
-        try await Task.sleep(nanoseconds: 100000000)
+        try await simNetwork.converge()
+
         do {
             try await simNetwork.verifyForwardingTables()
         } catch TestError.failure(let message, let expected, let actual) {
@@ -649,7 +725,8 @@ final class DistanceVectorNetworkTests: XCTestCase {
 
         await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: 1)
 
-        try await Task.sleep(nanoseconds: 100000000)
+        try await simNetwork.converge()
+
         do {
             try await simNetwork.verifyForwardingTables()
         } catch TestError.failure(let message, let expected, let actual) {
@@ -661,7 +738,8 @@ final class DistanceVectorNetworkTests: XCTestCase {
         // link down
         await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: Cost.max)
 
-        try await Task.sleep(nanoseconds: 100000000)
+        try await simNetwork.converge()
+
         do {
             try await simNetwork.verifyForwardingTables()
         } catch TestError.failure(let message, let expected, let actual) {
@@ -673,28 +751,29 @@ final class DistanceVectorNetworkTests: XCTestCase {
 
     func testBigLoop() async throws {
          /*
-        A◄─0─►B◄─0─►C◄─0─►D
+        A◄─1─►B◄─1─►C◄─1─►D
         ▲                 ▲
         │                 │
-        1                 0
+        2                 1
         │                 │
         ▼                 ▼
-        H◄─0─►G◄─0─►F◄─0─►E
+        H◄─1─►G◄─1─►F◄─1─►E
          */
         addNodesToGraph(numNodes: 8)
-        graph!.addEdge(from: "A", to: "B", weight: 0, directed: false)
-        graph!.addEdge(from: "B", to: "C", weight: 0, directed: false)
-        graph!.addEdge(from: "C", to: "D", weight: 0, directed: false)
-        graph!.addEdge(from: "D", to: "E", weight: 0, directed: false)
-        graph!.addEdge(from: "E", to: "F", weight: 0, directed: false)
-        graph!.addEdge(from: "F", to: "G", weight: 0, directed: false)
-        graph!.addEdge(from: "G", to: "H", weight: 0, directed: false)
-        graph!.addEdge(from: "H", to: "A", weight: 1, directed: false)
+        graph!.addEdge(from: "A", to: "B", weight: 1, directed: false)
+        graph!.addEdge(from: "B", to: "C", weight: 1, directed: false)
+        graph!.addEdge(from: "C", to: "D", weight: 1, directed: false)
+        graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
+        graph!.addEdge(from: "E", to: "F", weight: 1, directed: false)
+        graph!.addEdge(from: "F", to: "G", weight: 1, directed: false)
+        graph!.addEdge(from: "G", to: "H", weight: 1, directed: false)
+        graph!.addEdge(from: "H", to: "A", weight: 2, directed: false)
         logMessage("Graph: \(graph!)\n", to: .standardError)
 
         let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
 
-        try await Task.sleep(nanoseconds: 100000000)
+        try await simNetwork.converge()
+
         do {
             try await simNetwork.verifyForwardingTables()
         } catch TestError.failure(let message, let expected, let actual) {
@@ -715,7 +794,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
             ("D", "E", 1),
             ("D", "E", 2),
             ("F", "G", 2),
-            ("G", "H", 255),
+            ("G", "H", 254),
             ("B", "A", 43),
             ("C", "B", 1),
             ("D", "C", 5),
@@ -725,11 +804,12 @@ final class DistanceVectorNetworkTests: XCTestCase {
         for (updateSrc, updateDst, updateCost) in updates {
             await simNetwork.updateLinkCost(source: updateSrc, dest: updateDst, newCost: updateCost)
 
-            try await Task.sleep(nanoseconds: 100000000)
+            try await simNetwork.converge()
 
             do {
                 try await simNetwork.verifyForwardingTables()
             } catch TestError.failure(let message, let expected, let actual) {
+                logMessage("Update: \((updateSrc, updateDst, updateCost))", to: .standardError)
                 logMessage("Expected: \(expected.dvstr)", to: .standardError)
                 logMessage("Actual: \(actual.dvstr)", to: .standardError)
                 XCTFail(message)

@@ -142,17 +142,13 @@ actor DistanceVectorRoutingNode<
 
         for (destId, peerForwardingEntry) in peerDv {
             let candidate_cost = peerForwardingEntry.cost
+            let existingEntry = distanceVector[destId]
 
             guard candidate_cost != Cost.max else {
-                let linkCostDirectToDest = linkCosts[destId]
-                if linkCostDirectToDest != nil {
+                updated = true
+                if existingEntry?.linkId == peerId && linkCosts[destId] != nil {
                     // can still reach host through direct link
-                    distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCostDirectToDest!)
-                    updated = true
-                } else {
-                    // can't reach host, insert tombstone
-                    distanceVector[destId] = ForwardingEntry(linkId: peerId, cost: Cost.max)
-                    updated = true
+                    distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCosts[destId]!)
                 }
                 continue
             }
