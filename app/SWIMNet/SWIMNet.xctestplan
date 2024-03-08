@@ -4,9 +4,8 @@
       "id" : "D58772F6-C3E8-4D61-AD8E-6F310DD5E1AD",
       "name" : "Test Scheme Action",
       "options" : {
-        "addressSanitizer" : {
-          "enabled" : false
-        }
+        "threadSanitizerEnabled" : true,
+        "undefinedBehaviorSanitizerEnabled" : true
       }
     }
   ],

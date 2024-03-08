@@ -58,6 +58,7 @@ struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
 }
 
 protocol SendDelegate {
+    @Sendable
     func send(
         from: any PeerIdT,
         sendTo peerId: any PeerIdT,
@@ -69,11 +70,11 @@ protocol PrintableAsDistanceVector {
     var dvstr: String { get }
 }
 
-extension Dictionary: PrintableAsDistanceVector where Value: CustomStringConvertible {
+extension Dictionary: PrintableAsDistanceVector where Key: Comparable, Value: CustomStringConvertible {
     var dvstr: String {
         var out = "{"
-        for (key, value) in self {
-            out += "\n  dest: \(key) \(value)"
+        for key in self.keys.sorted() {
+            out += "\n  dest: \(key) \(self[key]!)"
         }
         out += "\n}\n"
 
@@ -145,10 +146,15 @@ actor DistanceVectorRoutingNode<
             let existingEntry = distanceVector[destId]
 
             guard candidate_cost != Cost.max else {
-                updated = true
                 if existingEntry?.linkId == peerId && linkCosts[destId] != nil {
                     // can still reach host through direct link
                     distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCosts[destId]!)
+                    updated = true
+                } else if existingEntry?.linkId == peerId {
+                    // route to host is down
+                    distanceVector[destId] = ForwardingEntry(linkId: peerId, cost: Cost.max)
+                } else {
+                    updated = true
                 }
                 continue
             }
@@ -208,8 +214,16 @@ actor DistanceVectorRoutingNode<
         }
     }
 
-    func getLinkForDest(dest: PeerId) -> Optional<PeerId> {
-        return distanceVector[dest]?.linkId
+    func getLinkForDest(dest: PeerId) -> Optional<(PeerId, Cost)> {
+        if let entry = distanceVector[dest] {
+            guard entry.cost != Cost.max else {
+                return nil
+            }
+
+            return (entry.linkId, entry.cost)
+        }
+
+        return nil
     }
 
     func sendDistanceVectorToPeers() {
