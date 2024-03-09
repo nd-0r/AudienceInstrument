@@ -710,7 +710,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         graph!.addEdge(from: "B", to: "E", weight: 4, directed: false)
         graph!.addEdge(from: "D", to: "A", weight: 1, directed: false)
         graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
-//        logMessage("Graph: \(graph!)\n", to: .standardError)
+        logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
 
         let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
 
@@ -769,7 +769,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         graph!.addEdge(from: "F", to: "G", weight: 1, directed: false)
         graph!.addEdge(from: "G", to: "H", weight: 1, directed: false)
         graph!.addEdge(from: "H", to: "A", weight: 2, directed: false)
-        logMessage("Graph: \(graph!)\n", to: .standardError)
+        logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
 
         let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
 
@@ -816,6 +816,37 @@ final class DistanceVectorNetworkTests: XCTestCase {
                 XCTFail(message)
                 break
             }
+        }
+    }
+
+    func testEmpty() async throws {
+        /*
+        A◄─0─►B◄─0─►C
+        ▲     ▲
+        │     │
+        0     0
+        │     │
+        ▼     ▼
+        D◄─0─►E
+         */
+        addNodesToGraph(numNodes: 5)
+        graph!.addEdge(from: "A", to: "B", weight: 8, directed: false)
+        graph!.addEdge(from: "B", to: "C", weight: 3, directed: false)
+        graph!.addEdge(from: "B", to: "E", weight: 4, directed: false)
+        graph!.addEdge(from: "D", to: "A", weight: 1, directed: false)
+        graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
+        logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
+
+        let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
+
+        try await simNetwork.converge()
+
+        do {
+            try await simNetwork.verifyForwardingTables()
+        } catch TestError.failure(let message, let expected, let actual) {
+            logMessage("Expected: \(expected.dvstr)", to: .standardError)
+            logMessage("Actual: \(actual.dvstr)", to: .standardError)
+            XCTFail(message)
         }
     }
     /*
