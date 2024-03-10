@@ -82,6 +82,10 @@ extension Dictionary: PrintableAsDistanceVector where Key: Comparable, Value: Cu
     }
 }
 
+enum DistanceVectorRoutingNodeError: Error {
+    case invalidCost(message: String = "Cost must be less than or equal to Cost.max / 2")
+}
+
 actor DistanceVectorRoutingNode<
     PeerId: PeerIdT,
     Cost: CostT,
@@ -146,8 +150,9 @@ actor DistanceVectorRoutingNode<
             let existingEntry = distanceVector[destId]
 
             guard candidate_cost != Cost.max else {
-                if existingEntry?.linkId == peerId && linkCosts[destId] != nil {
+                if linkCosts[destId] != nil {
                     // can still reach host through direct link
+                    // assuming that each host has a maximum 1 link to neighbors
                     distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCosts[destId]!)
                     updated = true
                 } else if existingEntry?.linkId == peerId {
@@ -181,7 +186,11 @@ actor DistanceVectorRoutingNode<
         }
     }
 
-    func updateLinkCost(linkId: PeerId, newCost: Cost?) {
+    func updateLinkCost(linkId: PeerId, newCost: Cost?) throws {
+        guard newCost ?? 0 <= Cost.max >> 1 else {
+            throw DistanceVectorRoutingNodeError.invalidCost()
+        }
+
         linkCosts[linkId] = newCost
         var updated = false
 

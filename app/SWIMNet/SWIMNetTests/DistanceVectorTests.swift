@@ -97,7 +97,7 @@ final class DistanceVectorNodeTests: XCTestCase {
 
     // adding link costs updates distance vector if empty
     func testAddLinkCost() async throws {
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
         let (linkToB, _) = await dVNode!.getLinkForDest(dest: "B")!
         XCTAssertEqual(linkToB, "B")
         let expectedDVTo_B: DVDict = [
@@ -119,11 +119,11 @@ final class DistanceVectorNodeTests: XCTestCase {
  
     // updating link costs updates distance vector if lower cost
     func testUpdateLinkCostLower() async throws {
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
         var (linkToB, _) = await dVNode!.getLinkForDest(dest: "B")!
         XCTAssertEqual(linkToB, "B")
 
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
         (linkToB, _) = await dVNode!.getLinkForDest(dest: "B")!
         XCTAssertEqual(linkToB, "B")
         // since the cost decreased, this should trigger a send
@@ -150,7 +150,7 @@ final class DistanceVectorNodeTests: XCTestCase {
 
     // updating link costs does not update distance vector if higher cost
     func testUpdateLinkCostHigher() async throws {
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 8)
         var (linkToB, _) = await dVNode!.getLinkForDest(dest: "B")!
         XCTAssertEqual(linkToB, "B")
         let expectedDVTo_B: DVDict = [
@@ -168,7 +168,7 @@ final class DistanceVectorNodeTests: XCTestCase {
             withDVDict: any(DVDict.self, of: expectedDVTo_B)
         )).wasCalled(1)
 
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 9)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 9)
         (linkToB, _) = await dVNode!.getLinkForDest(dest: "B")!
         XCTAssertEqual(linkToB, "B")
         // since the cost increased, this should not trigger a send
@@ -178,6 +178,22 @@ final class DistanceVectorNodeTests: XCTestCase {
             sendTo: any(NodeID.self, of: "B"),
             withDVDict: any(DVDict.self, of: expectedDVTo_B)
         )).wasCalled(1)
+    }
+
+    func testUpdateLinkCostTooBig() async throws {
+        do {
+            try await dVNode!.updateLinkCost(linkId: "B", newCost: Cost.max / 2)
+        } catch DistanceVectorRoutingNodeError.invalidCost(_) {
+            XCTFail("Expected NO error when setting cost to Cost.max / 2")
+        }
+
+        do {
+            try await dVNode!.updateLinkCost(linkId: "B", newCost: Cost.max / 2 + 1)
+        } catch DistanceVectorRoutingNodeError.invalidCost(_) {
+            return
+        }
+
+        XCTFail("Expected error when setting cost greater than Cost.max / 2 + 1")
     }
 
     // distance vector is properly merged using local link costs and sent
@@ -199,8 +215,8 @@ final class DistanceVectorNodeTests: XCTestCase {
             "D": ForwardingEntry(linkId: "D", cost: 3)
         ]
 
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
-        await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
             withDistanceVector: dVFrom_B
@@ -234,8 +250,8 @@ final class DistanceVectorNodeTests: XCTestCase {
             "D": ForwardingEntry(linkId: "D", cost: 0)
         ]
 
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
-        await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
             withDistanceVector: dVFrom_B
@@ -267,9 +283,9 @@ final class DistanceVectorNodeTests: XCTestCase {
               | <-------->|
                     11
          */
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
-        await dVNode!.updateLinkCost(linkId: "C", newCost: 13)
-        await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "C", newCost: 13)
+        try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B1: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 5),
@@ -321,8 +337,8 @@ final class DistanceVectorNodeTests: XCTestCase {
            3     5
         D <-> A <-> B     C
          */
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
-        await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B1: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 5),
@@ -372,8 +388,8 @@ final class DistanceVectorNodeTests: XCTestCase {
            3
         D <-> A     B     C
          */
-        await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
-        await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
+        try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B: DVDict = [
             "A": ForwardingEntry(linkId: "A", cost: 5),
@@ -385,7 +401,7 @@ final class DistanceVectorNodeTests: XCTestCase {
             withDistanceVector: dVFrom_B
         )
 
-        await dVNode!.updateLinkCost(linkId: "B", newCost: nil)
+        try await dVNode!.updateLinkCost(linkId: "B", newCost: nil)
 
         // receive distance vector from unknown host
         let dVFrom_E: DVDict = [
@@ -464,7 +480,7 @@ where NodeId: PeerIdT & Decodable & Encodable,
     private var magicNumGossips = 0
 
 
-    init(networkGraph: WeightedGraph<NodeId, Cost>) async {
+    init(networkGraph: WeightedGraph<NodeId, Cost>) async throws {
         self.networkGraph = networkGraph
 
         sendDelegateMock = SendDelegateMock()
@@ -495,15 +511,15 @@ where NodeId: PeerIdT & Decodable & Encodable,
             }
 
             if edge.directed {
-                await dVNodes[uVertex]!.updateLinkCost(linkId: vVertex, newCost: edge.weight)
+                try await dVNodes[uVertex]!.updateLinkCost(linkId: vVertex, newCost: edge.weight)
             } else {
-                await dVNodes[uVertex]!.updateLinkCost(linkId: vVertex, newCost: edge.weight)
-                await dVNodes[vVertex]!.updateLinkCost(linkId: uVertex, newCost: edge.weight)
+                try await dVNodes[uVertex]!.updateLinkCost(linkId: vVertex, newCost: edge.weight)
+                try await dVNodes[vVertex]!.updateLinkCost(linkId: uVertex, newCost: edge.weight)
             }
         }
     }
 
-    func updateLinkCost(source: NodeId, dest: NodeId, newCost: Cost?) async {
+    func updateLinkCost(source: NodeId, dest: NodeId, newCost: Cost?) async throws {
         guard networkGraph.edgeExists(from: source, to: dest) else {
             return
         }
@@ -525,10 +541,10 @@ where NodeId: PeerIdT & Decodable & Encodable,
         }
 
         if currEdge.directed {
-            await dVNodes[source]!.updateLinkCost(linkId: dest, newCost: newCost)
+            try await dVNodes[source]!.updateLinkCost(linkId: dest, newCost: newCost)
         } else {
-            await dVNodes[source]!.updateLinkCost(linkId: dest, newCost: newCost)
-            await dVNodes[dest]!.updateLinkCost(linkId: source, newCost: newCost)
+            try await dVNodes[source]!.updateLinkCost(linkId: dest, newCost: newCost)
+            try await dVNodes[dest]!.updateLinkCost(linkId: source, newCost: newCost)
         }
     }
 
@@ -712,7 +728,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
         logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
 
-        let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
+        let simNetwork = try await SimulatedNetwork(networkGraph: self.graph!)
 
         try await simNetwork.converge()
 
@@ -724,7 +740,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
             XCTFail(message)
         }
 
-        await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: 1)
+        try await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: 1)
 
         try await simNetwork.converge()
 
@@ -737,7 +753,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         }
 
         // link down
-        await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: Cost.max)
+        try await simNetwork.updateLinkCost(source: "B", dest: "D", newCost: Cost.max)
 
         try await simNetwork.converge()
 
@@ -771,7 +787,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         graph!.addEdge(from: "H", to: "A", weight: 2, directed: false)
         logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
 
-        let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
+        let simNetwork = try await SimulatedNetwork(networkGraph: self.graph!)
 
         try await simNetwork.converge()
 
@@ -803,7 +819,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         ]
 
         for (updateSrc, updateDst, updateCost) in updates {
-            await simNetwork.updateLinkCost(source: updateSrc, dest: updateDst, newCost: updateCost)
+            try await simNetwork.updateLinkCost(source: updateSrc, dest: updateDst, newCost: updateCost)
 
             try await simNetwork.converge()
 
@@ -837,7 +853,7 @@ final class DistanceVectorNetworkTests: XCTestCase {
         graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
         logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
 
-        let simNetwork = await SimulatedNetwork(networkGraph: self.graph!)
+        let simNetwork = try await SimulatedNetwork(networkGraph: self.graph!)
 
         try await simNetwork.converge()
 
@@ -849,6 +865,74 @@ final class DistanceVectorNetworkTests: XCTestCase {
             XCTFail(message)
         }
     }
+
+    func testLarge() async throws {
+         /*
+        ┌────2─────┐ ┌────3─────┐
+        │          │ │          │
+        ▼          ▼ ▼          ▼
+        A◄──1►B◄─2─►C◄───►D◄──1►E◄─2─►F
+        │     ▲       3 ▲ ▲ ▲         ▲
+        │     │         │ │ │         │
+        │     └────9────┘ │ └────5────┘
+        │                 │
+        └───────7─────────┘
+        */
+        addNodesToGraph(numNodes: 6)
+        graph!.addEdge(from: "A", to: "B", weight: 1, directed: false)
+        graph!.addEdge(from: "A", to: "C", weight: 2, directed: false)
+        graph!.addEdge(from: "A", to: "D", weight: 7, directed: false)
+        graph!.addEdge(from: "B", to: "C", weight: 2, directed: false)
+        graph!.addEdge(from: "B", to: "D", weight: 9, directed: false)
+        graph!.addEdge(from: "C", to: "D", weight: 3, directed: false)
+        graph!.addEdge(from: "C", to: "E", weight: 3, directed: false)
+        graph!.addEdge(from: "D", to: "E", weight: 1, directed: false)
+        graph!.addEdge(from: "D", to: "F", weight: 5, directed: false)
+        graph!.addEdge(from: "E", to: "F", weight: 2, directed: false)
+        logMessage("Graph \(self.testRun?.test.name ?? ""): \(graph!)\n", to: .standardError)
+
+        let simNetwork = try await SimulatedNetwork(networkGraph: self.graph!)
+
+        try await simNetwork.converge()
+
+        do {
+            try await simNetwork.verifyForwardingTables()
+        } catch TestError.failure(let message, let expected, let actual) {
+            XCTFail(message)
+            logMessage("Expected: \(expected.dvstr)", to: .standardError)
+            logMessage("Actual: \(actual.dvstr)", to: .standardError)
+            return
+        }
+
+        let updates: [(NodeID, NodeID, Optional<Cost>)] = [
+            ("A", "B", nil),
+            ("C", "D", nil),
+            ("E", "F", nil),
+            ("D", "E", nil),
+            ("A", "D", Cost.max / 2),
+            ("A", "B", Cost.max / 2 - 1),
+            ("C", "D", Cost.max / 2 - 2),
+            ("E", "F", 0),
+            ("D", "E", 0)
+        ]
+
+        for (updateSrc, updateDst, updateCost) in updates {
+            try await simNetwork.updateLinkCost(source: updateSrc, dest: updateDst, newCost: updateCost)
+
+            try await simNetwork.converge()
+
+            do {
+                try await simNetwork.verifyForwardingTables()
+            } catch TestError.failure(let message, let expected, let actual) {
+                XCTFail(message)
+                logMessage("Update: \((updateSrc, updateDst, updateCost))\n", to: .standardError)
+                logMessage("Expected: \(expected.dvstr)", to: .standardError)
+                logMessage("Actual: \(actual.dvstr)", to: .standardError)
+                break
+            }
+        }
+    }
+
     /*
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
