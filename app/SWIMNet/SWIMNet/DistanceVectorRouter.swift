@@ -9,13 +9,16 @@ import Foundation
 
 typealias PeerIdT = Sendable & Comparable & Hashable
 
+private let kMaxPathLen = 16_777_216 // 2^24
+
 protocol UIntLike {}
-extension UInt: UIntLike {}
-extension UInt8: UIntLike {}
-extension UInt16: UIntLike {}
+// extension UInt: UIntLike {} // (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
+// extension UInt8: UIntLike {} // (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
+// extension UInt16: UIntLike {} //  (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
 extension UInt32: UIntLike {}
 extension UInt64: UIntLike {}
 typealias CostT = UIntLike & UnsignedInteger & FixedWidthInteger & Sendable
+
 
 struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
     Sendable,
@@ -32,7 +35,8 @@ struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
         fromNeighbor peerId: PeerId,
         toPeer destId: PeerId,
         withCost cost: Cost,
-        givenExistingEntry forwardingEntry: ForwardingEntry?
+        givenExistingEntry forwardingEntry: ForwardingEntry?,
+        givenDirectLinkToDest linkCost: Cost?
     ) -> ForwardingEntry? {
         guard forwardingEntry != nil else {
             return ForwardingEntry(linkId: peerId, cost: cost)
@@ -46,6 +50,9 @@ struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
                 linkId: peerId,
                 cost: cost
             )
+        } else if (peerId == forwardingEntry!.linkId &&
+                   cost > forwardingEntry!.cost) {
+            return ForwardingEntry(linkId: peerId, cost: cost)
         }
 
         return nil // Did not update anything
@@ -83,7 +90,7 @@ extension Dictionary: PrintableAsDistanceVector where Key: Comparable, Value: Cu
 }
 
 enum DistanceVectorRoutingNodeError: Error {
-    case invalidCost(message: String = "Cost must be less than or equal to Cost.max / 2")
+    case invalidCost(message: String)
 }
 
 actor DistanceVectorRoutingNode<
@@ -94,6 +101,9 @@ actor DistanceVectorRoutingNode<
     internal typealias DVEnt = ForwardingEntry<PeerId, Cost>
     internal typealias DistanceVector = [PeerId:DVEnt]
     typealias LinkCosts = [PeerId:Cost]
+
+    private let kMaxPathlen = 16_777_216 // 2^24
+    nonisolated let kMaxCost: Cost = Cost.max / Cost(kMaxPathLen) - 1
 
     private func getLinks() -> LinkCosts.Keys {
         return linkCosts.keys
@@ -138,10 +148,11 @@ actor DistanceVectorRoutingNode<
         withDistanceVector peerDv: DistanceVector
     ) {
         var updated = false
+        var toExclude: Set<PeerId> = Set()
 
         defer {
             if updated {
-                sendDistanceVectorToPeers()
+                sendDistanceVectorToPeers(excluding: toExclude)
             }
         }
 
@@ -150,16 +161,17 @@ actor DistanceVectorRoutingNode<
             let existingEntry = distanceVector[destId]
 
             guard candidate_cost != Cost.max else {
+                updated = true
                 if linkCosts[destId] != nil {
                     // can still reach host through direct link
                     // assuming that each host has a maximum 1 link to neighbors
                     distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCosts[destId]!)
-                    updated = true
                 } else if existingEntry?.linkId == peerId {
                     // route to host is down
                     distanceVector[destId] = ForwardingEntry(linkId: peerId, cost: Cost.max)
+                    toExclude.insert(peerId)
                 } else {
-                    updated = true
+                    toExclude.insert(peerId)
                 }
                 continue
             }
@@ -172,13 +184,22 @@ actor DistanceVectorRoutingNode<
                 continue
             }
 
+            if existingEntry != nil &&
+               existingEntry?.cost != Cost.max &&
+               candidate_cost > linkCost! + existingEntry!.cost {
+                // neighbor needs to update its distance vector
+                updated = true
+                continue
+            }
+
             let new_cost = candidate_cost + linkCost!
 
             if let newEntry = ForwardingEntry.computeForwardingEntry(
                 fromNeighbor: peerId,
                 toPeer: destId,
                 withCost: new_cost,
-                givenExistingEntry: distanceVector[destId]
+                givenExistingEntry: distanceVector[destId],
+                givenDirectLinkToDest: linkCosts[destId]
             ) {
                 distanceVector[destId] = newEntry
                 updated = true
@@ -187,12 +208,14 @@ actor DistanceVectorRoutingNode<
     }
 
     func updateLinkCost(linkId: PeerId, newCost: Cost?) throws {
-        guard newCost ?? 0 <= Cost.max >> 1 else {
-            throw DistanceVectorRoutingNodeError.invalidCost()
+        guard (newCost ?? 0) <= kMaxCost else {
+            throw DistanceVectorRoutingNodeError.invalidCost(
+                message: "Cost \(newCost ?? Cost(0)) must be <= \(kMaxCost)"
+            )
         }
 
         linkCosts[linkId] = newCost
-        var updated = false
+        var updated = true
 
         defer {
             if updated {
@@ -216,7 +239,8 @@ actor DistanceVectorRoutingNode<
             fromNeighbor: linkId,
             toPeer: linkId,
             withCost: newCost!,
-            givenExistingEntry: self.distanceVector[linkId]
+            givenExistingEntry: self.distanceVector[linkId],
+            givenDirectLinkToDest: newCost
         ) {
             self.distanceVector[linkId] = newEntry
             updated = true
@@ -235,15 +259,21 @@ actor DistanceVectorRoutingNode<
         return nil
     }
 
-    func sendDistanceVectorToPeers() {
+    func sendDistanceVectorToPeers(excluding nodesToExclude: Set<PeerId> = Set()) {
         distanceVectorSenderQueue.async { [
+            nodesToExclude = nodesToExclude,
             selfId = self.selfId,
-            neighbors = self.linkCosts.keys,
+            linkCosts = self.linkCosts,
             distanceVector = self.distanceVector,
             sendDelegate = self.sendDelegate
         ] in
             Task {
-                for peerId in neighbors {
+                for (peerId, cost) in linkCosts {
+                    guard !nodesToExclude.contains(peerId) &&
+                          cost != Cost.max else {
+                        continue
+                    }
+
                     try await sendDelegate.send(
                         from: selfId,
                         sendTo: peerId,
