@@ -47,6 +47,10 @@ public protocol SendDelegate {
     ) async throws -> Void
 }
 
+public protocol AvailableNodesUpdateDelegate {
+    func availableNodesDidUpdate(newAvailableNodes: [any PeerIdT])
+}
+
 protocol PrintableAsDistanceVector {
     var dvstr: String { get }
 }
@@ -95,6 +99,8 @@ public actor DistanceVectorRoutingNode<
         didSet { sendDistanceVectorToPeers() }
     }
 
+    public var updateDelegate: (any AvailableNodesUpdateDelegate)?
+
     public init(
         selfId: PeerId,
         dvUpdateThreshold: UInt,
@@ -122,11 +128,16 @@ public actor DistanceVectorRoutingNode<
         withDistanceVector peerDv: DistanceVector
     ) {
         var updated = false
+        var addedOrRemovedPeers = false
         var toExclude: Set<PeerId> = Set()
 
         defer {
             if updated {
                 sendDistanceVectorToPeers(excluding: toExclude)
+            }
+
+            if addedOrRemovedPeers {
+                self.updateDelegate?.availableNodesDidUpdate(newAvailableNodes: Array(self.distanceVector.keys))
             }
         }
 
@@ -143,6 +154,7 @@ public actor DistanceVectorRoutingNode<
                 } else if existingEntry?.linkId == peerId {
                     // route to host is down
                     distanceVector[destId] = ForwardingEntry(linkId: peerId, cost: Cost.max)
+                    addedOrRemovedPeers = true
                     toExclude.insert(peerId)
                 } else {
                     toExclude.insert(peerId)
@@ -168,7 +180,7 @@ public actor DistanceVectorRoutingNode<
 
             let new_cost = candidate_cost + linkCost!
 
-            if let newEntry = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
+            if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
                 fromNeighbor: peerId,
                 toPeer: destId,
                 withCost: new_cost,
@@ -177,6 +189,7 @@ public actor DistanceVectorRoutingNode<
             ) {
                 distanceVector[destId] = newEntry
                 updated = true
+                addedOrRemovedPeers = addedOrRemovedPeers || entryAddedOrRemoved
             }
         }
     }
@@ -189,11 +202,16 @@ public actor DistanceVectorRoutingNode<
         }
 
         linkCosts[linkId] = newCost
+        var addedOrRemovedPeers = false
         var updated = true
 
         defer {
             if updated {
                 sendDistanceVectorToPeers()
+            }
+
+            if addedOrRemovedPeers {
+                self.updateDelegate?.availableNodesDidUpdate(newAvailableNodes: Array(self.distanceVector.keys))
             }
         }
 
@@ -202,6 +220,7 @@ public actor DistanceVectorRoutingNode<
                 if forwardingEntry.linkId == linkId {
                     // Tombstone the destination because the neighbor is unreachable
                     distanceVector[destId] = ForwardingEntry(linkId: linkId, cost: Cost.max)
+                    addedOrRemovedPeers = true
                 }
             }
             updated = true
@@ -209,7 +228,7 @@ public actor DistanceVectorRoutingNode<
         }
 
         // Calculate new forwarding entry for direct link to neighbor
-        if let newEntry = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
+        if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
             fromNeighbor: linkId,
             toPeer: linkId,
             withCost: newCost!,
@@ -218,6 +237,7 @@ public actor DistanceVectorRoutingNode<
         ) {
             self.distanceVector[linkId] = newEntry
             updated = true
+            addedOrRemovedPeers = addedOrRemovedPeers || entryAddedOrRemoved
         }
     }
 
@@ -259,29 +279,38 @@ public actor DistanceVectorRoutingNode<
             }
         }
     }
-
+    
+    /// Computes a forwarding entry or none at all from a given entry and candidate information
+    /// depending on whether the existing entry was updated or not. Updated means that the
+    /// `ForwardingEntry` changed or was created.
+    /// - Parameters:
+    ///   - peerId: The neighbor from which the candidate update was received
+    ///   - destId: The destination to which the forwarding entry pertains
+    ///   - cost: The new cost candidate for the from the neighbor with ID `peerId` existing entry
+    ///   - forwardingEntry: The existing forwarding entry; `nil` indicates nonexistent
+    ///   - linkCost: The cost of the direct link to the neighbor with ID `peerId`
+    /// - Returns: A pair containing the updated forwarding entry and a boolean which is true if
+    ///     this reprents a discovery or disappearance of a peer and false otherwise, or nil if no update
+    ///     is necessary.
     private static func computeForwardingEntry(
         fromNeighbor peerId: PeerId,
         toPeer destId: PeerId,
         withCost cost: Cost,
         givenExistingEntry forwardingEntry: ForwardingEntry<PeerId, Cost>?,
         givenDirectLinkToDest linkCost: Cost?
-    ) -> ForwardingEntry<PeerId, Cost>? {
+    ) -> (ForwardingEntry<PeerId, Cost>, Bool)? {
         guard forwardingEntry != nil else {
-            return ForwardingEntry(linkId: peerId, cost: cost)
+            return (ForwardingEntry(linkId: peerId, cost: cost), true)
         }
 
         if (cost < forwardingEntry!.cost) {
-            return ForwardingEntry(linkId: peerId, cost: cost)
+            return (ForwardingEntry(linkId: peerId, cost: cost), false)
         } else if (cost == forwardingEntry!.cost &&
                    peerId < forwardingEntry!.linkId) {
-            return ForwardingEntry(
-                linkId: peerId,
-                cost: cost
-            )
+            return (ForwardingEntry(linkId: peerId, cost: cost), false)
         } else if (peerId == forwardingEntry!.linkId &&
                    cost > forwardingEntry!.cost) {
-            return ForwardingEntry(linkId: peerId, cost: cost)
+            return (ForwardingEntry(linkId: peerId, cost: cost), false)
         }
 
         return nil // Did not update anything
