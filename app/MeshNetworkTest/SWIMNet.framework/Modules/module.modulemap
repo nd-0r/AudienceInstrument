@@ -1,0 +1,11 @@
+framework module SWIMNet {
+  umbrella header "SWIMNet.h"
+  export *
+
+  module * { export * }
+}
+
+module SWIMNet.Swift {
+  header "SWIMNet-Swift.h"
+  requires objc
+}

@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "D041A32C-F97A-427B-B815-09D581F6E54A",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:SWIMNet.xcodeproj",
+        "identifier" : "6BCC8DF32B7307D500683238",
+        "name" : "SWIMNetTests"
+      }
+    }
+  ],
+  "version" : 1
+}
