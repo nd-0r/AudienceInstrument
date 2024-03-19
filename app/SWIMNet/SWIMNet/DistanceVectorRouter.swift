@@ -7,55 +7,29 @@
 
 import Foundation
 
-typealias PeerIdT = Sendable & Comparable & Hashable
+public typealias PeerIdT = Sendable & Comparable & Hashable & Codable
 
 private let kMaxPathLen = 16_777_216 // 2^24
 
-protocol UIntLike {}
+public protocol UIntLike {}
 // extension UInt: UIntLike {} // (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
 // extension UInt8: UIntLike {} // (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
 // extension UInt16: UIntLike {} //  (`UIntLike` must be > `kMaxPathLen` in `DistanceVectorRoutingNode`)
 extension UInt32: UIntLike {}
 extension UInt64: UIntLike {}
-typealias CostT = UIntLike & UnsignedInteger & FixedWidthInteger & Sendable
+public typealias CostT = UIntLike & UnsignedInteger & FixedWidthInteger & Sendable & Codable
 
 
-struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
+public struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
     Sendable,
     Equatable,
-    CustomStringConvertible
+    CustomStringConvertible,
+    Codable
 {
     var linkId: PeerId
     var cost: Cost
-    var description: String {
+    public var description: String {
         "NextHop: \(linkId) Cost: \(cost)"
-    }
-
-    static func computeForwardingEntry(
-        fromNeighbor peerId: PeerId,
-        toPeer destId: PeerId,
-        withCost cost: Cost,
-        givenExistingEntry forwardingEntry: ForwardingEntry?,
-        givenDirectLinkToDest linkCost: Cost?
-    ) -> ForwardingEntry? {
-        guard forwardingEntry != nil else {
-            return ForwardingEntry(linkId: peerId, cost: cost)
-        }
-
-        if (cost < forwardingEntry!.cost) {
-            return ForwardingEntry(linkId: peerId, cost: cost)
-        } else if (cost == forwardingEntry!.cost &&
-                   peerId < forwardingEntry!.linkId) {
-            return ForwardingEntry(
-                linkId: peerId,
-                cost: cost
-            )
-        } else if (peerId == forwardingEntry!.linkId &&
-                   cost > forwardingEntry!.cost) {
-            return ForwardingEntry(linkId: peerId, cost: cost)
-        }
-
-        return nil // Did not update anything
     }
 
     init(linkId: PeerId, cost: Cost) {
@@ -64,12 +38,12 @@ struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
     }
 }
 
-protocol SendDelegate {
+public protocol SendDelegate {
     @Sendable
     func send(
         from: any PeerIdT,
         sendTo peerId: any PeerIdT,
-        withDVDict dv: any Sendable
+        withDVDict dv: any Sendable & Codable
     ) async throws -> Void
 }
 
@@ -89,18 +63,18 @@ extension Dictionary: PrintableAsDistanceVector where Key: Comparable, Value: Cu
     }
 }
 
-enum DistanceVectorRoutingNodeError: Error {
+public enum DistanceVectorRoutingNodeError: Error {
     case invalidCost(message: String)
 }
 
-actor DistanceVectorRoutingNode<
+public actor DistanceVectorRoutingNode<
     PeerId: PeerIdT,
     Cost: CostT,
     SendDelegateClass: SendDelegate
 > {
-    internal typealias DVEnt = ForwardingEntry<PeerId, Cost>
-    internal typealias DistanceVector = [PeerId:DVEnt]
-    typealias LinkCosts = [PeerId:Cost]
+    public typealias DVEnt = ForwardingEntry<PeerId, Cost>
+    public typealias DistanceVector = [PeerId:DVEnt]
+    public typealias LinkCosts = [PeerId:Cost]
 
     private let kMaxPathlen = 16_777_216 // 2^24
     nonisolated let kMaxCost: Cost = Cost.max / Cost(kMaxPathLen) - 1
@@ -117,11 +91,11 @@ actor DistanceVectorRoutingNode<
         return sendDelegate
     }
 
-    var sendDelegate: SendDelegateClass {
+    public var sendDelegate: SendDelegateClass {
         didSet { sendDistanceVectorToPeers() }
     }
 
-    init(
+    public init(
         selfId: PeerId,
         dvUpdateThreshold: UInt,
         linkCosts: LinkCosts = [:],
@@ -143,7 +117,7 @@ actor DistanceVectorRoutingNode<
         self.sendDelegate = sendDelegate
     }
 
-    func recvDistanceVector(
+    public func recvDistanceVector(
         fromNeighbor peerId: PeerId,
         withDistanceVector peerDv: DistanceVector
     ) {
@@ -194,7 +168,7 @@ actor DistanceVectorRoutingNode<
 
             let new_cost = candidate_cost + linkCost!
 
-            if let newEntry = ForwardingEntry.computeForwardingEntry(
+            if let newEntry = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
                 fromNeighbor: peerId,
                 toPeer: destId,
                 withCost: new_cost,
@@ -207,7 +181,7 @@ actor DistanceVectorRoutingNode<
         }
     }
 
-    func updateLinkCost(linkId: PeerId, newCost: Cost?) throws {
+    public func updateLinkCost(linkId: PeerId, newCost: Cost?) throws {
         guard (newCost ?? 0) <= kMaxCost else {
             throw DistanceVectorRoutingNodeError.invalidCost(
                 message: "Cost \(newCost ?? Cost(0)) must be <= \(kMaxCost)"
@@ -235,7 +209,7 @@ actor DistanceVectorRoutingNode<
         }
 
         // Calculate new forwarding entry for direct link to neighbor
-        if let newEntry = ForwardingEntry.computeForwardingEntry(
+        if let newEntry = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
             fromNeighbor: linkId,
             toPeer: linkId,
             withCost: newCost!,
@@ -247,7 +221,7 @@ actor DistanceVectorRoutingNode<
         }
     }
 
-    func getLinkForDest(dest: PeerId) -> Optional<(PeerId, Cost)> {
+    public func getLinkForDest(dest: PeerId) -> Optional<(PeerId, Cost)> {
         if let entry = distanceVector[dest] {
             guard entry.cost != Cost.max else {
                 return nil
@@ -259,7 +233,9 @@ actor DistanceVectorRoutingNode<
         return nil
     }
 
-    func sendDistanceVectorToPeers(excluding nodesToExclude: Set<PeerId> = Set()) {
+    private func sendDistanceVectorToPeers(
+        excluding nodesToExclude: Set<PeerId> = Set()
+    ) {
         distanceVectorSenderQueue.async { [
             nodesToExclude = nodesToExclude,
             selfId = self.selfId,
@@ -282,6 +258,33 @@ actor DistanceVectorRoutingNode<
                 }
             }
         }
+    }
+
+    private static func computeForwardingEntry(
+        fromNeighbor peerId: PeerId,
+        toPeer destId: PeerId,
+        withCost cost: Cost,
+        givenExistingEntry forwardingEntry: ForwardingEntry<PeerId, Cost>?,
+        givenDirectLinkToDest linkCost: Cost?
+    ) -> ForwardingEntry<PeerId, Cost>? {
+        guard forwardingEntry != nil else {
+            return ForwardingEntry(linkId: peerId, cost: cost)
+        }
+
+        if (cost < forwardingEntry!.cost) {
+            return ForwardingEntry(linkId: peerId, cost: cost)
+        } else if (cost == forwardingEntry!.cost &&
+                   peerId < forwardingEntry!.linkId) {
+            return ForwardingEntry(
+                linkId: peerId,
+                cost: cost
+            )
+        } else if (peerId == forwardingEntry!.linkId &&
+                   cost > forwardingEntry!.cost) {
+            return ForwardingEntry(linkId: peerId, cost: cost)
+        }
+
+        return nil // Did not update anything
     }
  
     internal var distanceVector: DistanceVector

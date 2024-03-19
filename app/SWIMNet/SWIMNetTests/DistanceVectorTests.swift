@@ -453,7 +453,7 @@ where NodeId: PeerIdT & Decodable & Encodable,
         func send(
             from: any SWIMNet.PeerIdT,
             sendTo peerId: any SWIMNet.PeerIdT,
-            withDVDict dv: Sendable
+            withDVDict dv: Sendable & Codable
         ) async throws {
             guard owner != nil else {
                 return

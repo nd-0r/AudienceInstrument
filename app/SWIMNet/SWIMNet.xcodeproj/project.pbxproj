@@ -12,7 +12,6 @@
 		6B70EC142B86B8A0007C4772 /* DistanceVectorRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B70EC132B86B8A0007C4772 /* DistanceVectorRouter.swift */; };
 		6B70EC172B8BD2E4007C4772 /* Mockingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 6B70EC162B8BD2E4007C4772 /* Mockingbird */; };
 		6B70EC192B8BDD36007C4772 /* WatchableDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B70EC182B8BDD36007C4772 /* WatchableDictionary.swift */; };
-		6B7CE36D2B788ED900457DE4 /* SWIM in Frameworks */ = {isa = PBXBuildFile; productRef = 6B7CE36C2B788ED900457DE4 /* SWIM */; };
 		6BCC8DEF2B7307D500683238 /* SWIMNet.docc in Sources */ = {isa = PBXBuildFile; fileRef = 6BCC8DEE2B7307D500683238 /* SWIMNet.docc */; };
 		6BCC8DF52B7307D500683238 /* SWIMNet.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6BCC8DEA2B7307D500683238 /* SWIMNet.framework */; };
 		6BCC8DFA2B7307D500683238 /* DistanceVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BCC8DF92B7307D500683238 /* DistanceVectorTests.swift */; };
@@ -51,7 +50,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B7CE36D2B788ED900457DE4 /* SWIM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,7 +153,6 @@
 			);
 			name = SWIMNet;
 			packageProductDependencies = (
-				6B7CE36C2B788ED900457DE4 /* SWIM */,
 			);
 			productName = SWIMNet;
 			productReference = 6BCC8DEA2B7307D500683238 /* SWIMNet.framework */;
@@ -447,7 +444,7 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.andreworals.SWIMNet;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -481,7 +478,7 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.andreworals.SWIMNet;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -605,11 +602,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6B70EC152B8BD2E4007C4772 /* XCRemoteSwiftPackageReference "mockingbird" */;
 			productName = Mockingbird;
-		};
-		6B7CE36C2B788ED900457DE4 /* SWIM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6B7CE36B2B788ED900457DE4 /* XCRemoteSwiftPackageReference "swift-cluster-membership" */;
-			productName = SWIM;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
