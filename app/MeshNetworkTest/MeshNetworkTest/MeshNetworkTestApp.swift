@@ -9,10 +9,10 @@ import SwiftUI
 
 @main
 struct MeshNetworkTestApp: App {
-    @StateObject private var connectionManager = ConnectionManager(displayName: UIDevice.current.name, clientSessionDelegate: <#T##MCSessionDelegate#>)
+    @StateObject private var connectionManager = ConnectionManager(displayName: UIDevice.current.name)
     var body: some Scene {
         WindowGroup {
-            PeerConnectionView(connectionManager: <#T##ConnectionManager#>)
+            MessengerView().environmentObject(connectionManager)
         }
     }
 }

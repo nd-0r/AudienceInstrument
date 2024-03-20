@@ -9,13 +9,15 @@ import Foundation
 import MultipeerConnectivity
 import SWIMNet
 
-class ConnectionManager: Observable {
+class ConnectionManager: ObservableObject {
     @Published internal var sessionPeers: [MCPeerID:MCSessionState] = [:]
     @Published internal var discoveredPeers: [MCPeerID] = []
+    @Published internal var allNodes: [Int:NodeMessageManager] = [:]
 
     internal var peersByHash: [Int:MCPeerID] = [:]
     private(set) var selfId: MCPeerID
     internal var routingNode: DistanceVectorRoutingNode<Int, UInt64, DVNodeSendDelegate>
+    private var routingNodeUpdateDelegate: NodeUpdateDelegate
 
     internal var browser: MCNearbyServiceBrowser
     private var browserDelegate: NearbyServiceBrowserDelegate
@@ -24,14 +26,15 @@ class ConnectionManager: Observable {
     private var advertiserDelegate: NearbyServiceAdvertiserDelegate
 
     internal var session: MCSession
-    public var clientSessionDelegate: MCSessionDelegate // Note: State update not used
     private var sessionDelegate: SessionDelegate
 
     private let kApplicationLevelMagic: UInt8 = 0x00
     private let kNetworkLevelMagic: UInt8 = 0xff
     private let kUnknownMagic: UInt8 = 0xaa
 
-    init(displayName: String, clientSessionDelegate: MCSessionDelegate) {
+    private let jsonEncoder = JSONEncoder()
+
+    init(displayName: String) {
         selfId = MCPeerID(displayName: displayName)
 
         let routingNodeSendDelegate = DVNodeSendDelegate()
@@ -40,6 +43,7 @@ class ConnectionManager: Observable {
             dvUpdateThreshold: 1,
             sendDelegate: routingNodeSendDelegate
         )
+        routingNodeUpdateDelegate = NodeUpdateDelegate()
 
         browser = MCNearbyServiceBrowser(
             peer: selfId,
@@ -54,12 +58,12 @@ class ConnectionManager: Observable {
         )
         advertiserDelegate = NearbyServiceAdvertiserDelegate()
 
-        self.clientSessionDelegate = clientSessionDelegate
         self.sessionDelegate = SessionDelegate()
         session = MCSession(peer: selfId)
         session.delegate = self.sessionDelegate
 
         routingNodeSendDelegate.owner = self
+        self.routingNodeUpdateDelegate.owner = self
         browserDelegate.owner = self
         advertiserDelegate.owner = self
         sessionDelegate.owner = self
@@ -77,19 +81,41 @@ class ConnectionManager: Observable {
     }
 
     public func send(
-        data: Data,
-        toPeer peerId: MCPeerID,
+        messageData: NodeMessageManager.NodeMessage,
+        toPeer peerId: Int,
         with reliability: MCSessionSendDataMode
     ) async throws {
-        guard let nextHop = await self.routingNode.getLinkForDest(dest: peerId.hashValue) else {
+        guard let nextHop = await self.routingNode.getLinkForDest(dest: peerId) else {
             return
         }
 
+        let data = try jsonEncoder.encode(messageData)
+
         try session.send(
-            Data(repeating: kApplicationLevelMagic, count: 1) + data,
+            Data(repeating: kApplicationLevelMagic, count: 1)
+                + data,
             toPeers: [self.peersByHash[nextHop.0]!],
             with: reliability
         )
+    }
+
+    internal class NodeUpdateDelegate: AvailableNodesUpdateDelegate {
+        internal weak var owner: ConnectionManager?
+
+        init(owner: ConnectionManager? = nil) {
+            self.owner = owner
+        }
+
+        func availableNodesDidUpdate(newAvailableNodes: [any SWIMNet.PeerIdT]) {
+            for node in newAvailableNodes {
+                if owner?.allNodes[node as! Int] == nil {
+                    owner!.allNodes[node as! Int] = NodeMessageManager(
+                        peerId: node as! Int,
+                        connectionManager: self.owner!
+                    )
+                }
+            }
+        }
     }
 
     internal class SessionDelegate: NSObject, MCSessionDelegate {
@@ -155,8 +181,17 @@ class ConnectionManager: Observable {
                     )
                 }
             case self.owner!.kApplicationLevelMagic:
-                // Forward to user
-                self.owner!.clientSessionDelegate.session(session, didReceive: data.suffix(from: 1), fromPeer: peerID)
+                // Forward to message manager
+                Task { @MainActor in
+                    let decoder = JSONDecoder()
+                    let nodeMessage = try decoder.decode(
+                        NodeMessageManager.NodeMessage.self,
+                        from: data.suffix(from: 1)
+                    )
+
+                    self.owner!.allNodes[nodeMessage.from]?
+                        .recvMessage(message: nodeMessage.message)
+                }
             default:
                 fatalError("Unexpected magic byte in data ConnectionManager.SessionDelegate.session")
                 // Don't forward to user: Not tagged correctly
@@ -174,12 +209,13 @@ class ConnectionManager: Observable {
                 return
             }
 
-            owner!.clientSessionDelegate.session(
-                session,
-                didReceive: stream,
-                withName: streamName,
-                fromPeer: peerID
-            )
+            // TODO not used
+//            owner!.clientSessionDelegate.session(
+//                session,
+//                didReceive: stream,
+//                withName: streamName,
+//                fromPeer: peerID
+//            )
         }
         
         func session(
@@ -193,12 +229,13 @@ class ConnectionManager: Observable {
                 return
             }
 
-            owner!.clientSessionDelegate.session(
-                session,
-                didStartReceivingResourceWithName: resourceName,
-                fromPeer: peerID,
-                with: progress
-            )
+            // TODO not used
+//            owner!.clientSessionDelegate.session(
+//                session,
+//                didStartReceivingResourceWithName: resourceName,
+//                fromPeer: peerID,
+//                with: progress
+//            )
         }
         
         func session(
@@ -213,13 +250,14 @@ class ConnectionManager: Observable {
                 return
             }
 
-            owner!.clientSessionDelegate.session(
-                session,
-                didFinishReceivingResourceWithName: resourceName,
-                fromPeer: peerID,
-                at: localURL,
-                withError: error
-            )
+            // TODO not used
+//            owner!.clientSessionDelegate.session(
+//                session,
+//                didFinishReceivingResourceWithName: resourceName,
+//                fromPeer: peerID,
+//                at: localURL,
+//                withError: error
+//            )
         }
     }
 

@@ -20,4 +20,7 @@ MockingbirdCache
 **/xcshareddata/WorkspaceSettings.xcsettings
 .DS_Store
 
+archives
+xcframeworks
+
 # End of https://www.toptal.com/developers/gitignore/api/xcode
