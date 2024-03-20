@@ -6,14 +6,62 @@
 //
 
 import SwiftUI
+import MultipeerConnectivity
 
-struct PeerConnectionView: View {
-    @EnvironmentObject var connectionManager: ConnectionManager
+struct PeerConnectionStatusView: View {
+    var status: MCSessionState
+    var clientName: String
+    var didSelectCallback: () -> Void
+
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        Button {
+            didSelectCallback()
+        } label: {
+            HStack {
+                Text(clientName)
+                    .foregroundStyle(.blue)
+                Spacer()
+            }
+            switch status {
+            case MCSessionState.connected:
+                Circle().foregroundStyle(.green).frame(width: 40, height: 40)
+            case MCSessionState.notConnected:
+                Circle().foregroundStyle(.red).frame(width: 40, height: 40)
+            default:
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle())
+                    .scaledToFit()
+            }
+        }
+        .padding()
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 
-#Preview {
-    PeerConnectionView()
+struct PeerConnectionView: View {
+    @EnvironmentObject var connectionManager: ConnectionManager
+
+    var body: some View {
+        ScrollView {
+            ForEach(
+                Array(connectionManager.sessionPeers.keys),
+                id: \.self
+            ) { mcPeerId in
+                PeerConnectionStatusView(
+                    status: connectionManager.sessionPeers[mcPeerId]!,
+                    clientName: mcPeerId.displayName,
+                    didSelectCallback: { }
+                )
+            }
+        }
+    }
 }
+
+struct PeerConnectionView_Previews: PreviewProvider {
+    static var previews: some View {
+        return PeerConnectionView()
+            .environmentObject(createMockConnectionManager())
+    }
+}
+

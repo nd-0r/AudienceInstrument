@@ -11,22 +11,25 @@ import SWIMNet
 
 class ConnectionManager: ObservableObject {
     @Published internal var sessionPeers: [MCPeerID:MCSessionState] = [:]
-    @Published internal var discoveredPeers: [MCPeerID] = []
     @Published internal var allNodes: [Int:NodeMessageManager] = [:]
 
+    private let debugUI: Bool
+
     internal var peersByHash: [Int:MCPeerID] = [:]
+    private var previouslyConnectedPeers: Set<MCPeerID> = Set()
+
     private(set) var selfId: MCPeerID
-    internal var routingNode: DistanceVectorRoutingNode<Int, UInt64, DVNodeSendDelegate>
-    private var routingNodeUpdateDelegate: NodeUpdateDelegate
+    internal var routingNode: DistanceVectorRoutingNode<Int, UInt64, DVNodeSendDelegate>?
+    private var routingNodeUpdateDelegate: NodeUpdateDelegate?
 
-    internal var browser: MCNearbyServiceBrowser
-    private var browserDelegate: NearbyServiceBrowserDelegate
+    internal var browser: MCNearbyServiceBrowser?
+    private var browserDelegate: NearbyServiceBrowserDelegate?
 
-    internal var advertiser: MCNearbyServiceAdvertiser
-    private var advertiserDelegate: NearbyServiceAdvertiserDelegate
+    internal var advertiser: MCNearbyServiceAdvertiser?
+    private var advertiserDelegate: NearbyServiceAdvertiserDelegate?
 
-    internal var session: MCSession
-    private var sessionDelegate: SessionDelegate
+    internal var session: MCSession?
+    private var sessionDelegate: SessionDelegate?
 
     private let kApplicationLevelMagic: UInt8 = 0x00
     private let kNetworkLevelMagic: UInt8 = 0xff
@@ -34,7 +37,19 @@ class ConnectionManager: ObservableObject {
 
     private let jsonEncoder = JSONEncoder()
 
+    init(
+        displayName: String,
+        debugSessionPeers: [MCPeerID:MCSessionState],
+        debugAllNodes: [Int:NodeMessageManager]
+    ) {
+        debugUI = true
+        selfId = MCPeerID(displayName: displayName)
+        sessionPeers = debugSessionPeers
+        allNodes = debugAllNodes
+    }
+
     init(displayName: String) {
+        debugUI = false
         selfId = MCPeerID(displayName: displayName)
 
         let routingNodeSendDelegate = DVNodeSendDelegate()
@@ -47,37 +62,50 @@ class ConnectionManager: ObservableObject {
 
         browser = MCNearbyServiceBrowser(
             peer: selfId,
-            serviceType: "" /* TODO */
+            serviceType: kServiceType
         )
         browserDelegate = NearbyServiceBrowserDelegate()
 
         advertiser = MCNearbyServiceAdvertiser(
             peer: self.selfId,
             discoveryInfo: nil /* TODO */,
-            serviceType: "" /* TODO */
+            serviceType: kServiceType
         )
         advertiserDelegate = NearbyServiceAdvertiserDelegate()
 
         self.sessionDelegate = SessionDelegate()
         session = MCSession(peer: selfId)
-        session.delegate = self.sessionDelegate
+        session!.delegate = self.sessionDelegate
 
         routingNodeSendDelegate.owner = self
-        self.routingNodeUpdateDelegate.owner = self
-        browserDelegate.owner = self
-        advertiserDelegate.owner = self
-        sessionDelegate.owner = self
+        self.routingNodeUpdateDelegate!.owner = self
+        browserDelegate!.owner = self
+        advertiserDelegate!.owner = self
+        sessionDelegate!.owner = self
 
-        browser.delegate = self.browserDelegate
-        advertiser.delegate = self.advertiserDelegate
+        browser!.delegate = self.browserDelegate
+        advertiser!.delegate = self.advertiserDelegate
 
-        browser.startBrowsingForPeers()
-        advertiser.startAdvertisingPeer()
+        browser!.startBrowsingForPeers()
+        advertiser!.startAdvertisingPeer()
     }
 
     deinit {
-        advertiser.stopAdvertisingPeer()
-        browser.stopBrowsingForPeers()
+        guard debugUI == false else {
+            return
+        }
+
+        advertiser!.stopAdvertisingPeer()
+        browser!.stopBrowsingForPeers()
+    }
+
+    public func connect(toPeer: MCPeerID) {
+        browser!.invitePeer(
+            toPeer,
+            to: session!,
+            withContext: nil /* TODO */,
+            timeout: TimeInterval(5.0)
+        )
     }
 
     public func send(
@@ -85,13 +113,17 @@ class ConnectionManager: ObservableObject {
         toPeer peerId: Int,
         with reliability: MCSessionSendDataMode
     ) async throws {
-        guard let nextHop = await self.routingNode.getLinkForDest(dest: peerId) else {
+        guard debugUI == false else {
+            return
+        }
+
+        guard let nextHop = await self.routingNode!.getLinkForDest(dest: peerId) else {
             return
         }
 
         let data = try jsonEncoder.encode(messageData)
 
-        try session.send(
+        try session!.send(
             Data(repeating: kApplicationLevelMagic, count: 1)
                 + data,
             toPeers: [self.peersByHash[nextHop.0]!],
@@ -139,11 +171,12 @@ class ConnectionManager: ObservableObject {
             Task {
                 switch state {
                 case .notConnected:
-                    try await self.owner!.routingNode.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
+                    try await self.owner!.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
                 case .connecting:
-                    try await self.owner!.routingNode.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
+                    try await self.owner!.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
                 case .connected:
-                    try await self.owner!.routingNode.updateLinkCost(linkId: peerID.hashValue, newCost: 1 /* TODO */)
+                    self.owner!.previouslyConnectedPeers.insert(peerID)
+                    try await self.owner!.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: 1 /* TODO */)
                 @unknown default:
                     fatalError("Unkonwn peer state in ConnectionManager.session")
                 }
@@ -175,7 +208,7 @@ class ConnectionManager: ObservableObject {
                         from: data.suffix(from: 1)
                     )
 
-                    await self.owner!.routingNode.recvDistanceVector(
+                    await self.owner!.routingNode!.recvDistanceVector(
                         fromNeighbor: peerID.hashValue,
                         withDistanceVector: dv
                     )
@@ -275,7 +308,7 @@ class ConnectionManager: ObservableObject {
             }
 
             let jsonData = try jsonEncoder.encode(dv)
-            try self.owner!.session.send(
+            try self.owner!.session!.send(
                 Data(repeating: owner!.kNetworkLevelMagic, count: 1) + jsonData,
                 toPeers: [self.owner!.peersByHash[peerId as! Int]!],
                 with: MCSessionSendDataMode.reliable
@@ -311,9 +344,19 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
+            self.owner!.peersByHash[peerID.hashValue] = peerID
+
             // TODO use discovery info
             Task { @MainActor in
-                self.owner!.discoveredPeers.append(peerID)
+                self.owner!.sessionPeers[peerID] = MCSessionState.notConnected
+            }
+
+            // Automatically reconnect if the peer was connected before
+            if !self.owner!.previouslyConnectedPeers.contains(peerID) && (
+                self.owner!.sessionPeers[peerID] == nil ||
+                self.owner!.sessionPeers[peerID] == MCSessionState.notConnected
+            ) {
+                self.owner!.connect(toPeer: peerID)
             }
         }
         
@@ -326,8 +369,10 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
+            self.owner!.peersByHash.removeValue(forKey: peerID.hashValue)
+
             Task { @MainActor in
-                self.owner!.discoveredPeers.removeAll(where: { $0 == peerID })
+                self.owner!.sessionPeers.removeValue(forKey: peerID)
             }
         }
     }

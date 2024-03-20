@@ -7,16 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6B5A91482BAB7D7B003EA4FC /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B5A91472BAB7D7B003EA4FC /* Utils.swift */; };
+		6B5A91492BAB9C01003EA4FC /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */; };
+		6B5A914A2BAB9C01003EA4FC /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6B5A914F2BABADA0003EA4FC /* Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B5A914E2BABADA0003EA4FC /* Data.swift */; };
 		6B75AF922BA4E058002A7893 /* MeshNetworkTestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */; };
 		6B75AF962BA4E05C002A7893 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B75AF952BA4E05C002A7893 /* Assets.xcassets */; };
 		6B75AF992BA4E05C002A7893 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B75AF982BA4E05C002A7893 /* Preview Assets.xcassets */; };
 		6B89B73C2BA6A2CF0092B742 /* MessageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B73B2BA6A2CF0092B742 /* MessageManager.swift */; };
-		6B89B7402BA6A2E20092B742 /* MeshNetworkTestModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B73F2BA6A2E20092B742 /* MeshNetworkTestModels.swift */; };
 		6B89B7422BA6A2ED0092B742 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B7412BA6A2ED0092B742 /* ConnectionManager.swift */; };
 		6B89B7442BA6A3180092B742 /* PeerConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B7432BA6A3180092B742 /* PeerConnectionView.swift */; };
 		6B89B7462BA6A33E0092B742 /* MessengerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B7452BA6A33E0092B742 /* MessengerView.swift */; };
 		6B89B76D2BAA59C30092B742 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B89B76C2BAA59C30092B742 /* ChatView.swift */; };
-		6B8D698E2BAAA56B004DED8E /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -26,6 +28,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				6B5A914A2BAB9C01003EA4FC /* SWIMNet.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -33,12 +36,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6B5A91472BAB7D7B003EA4FC /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		6B5A914B2BABABB0003EA4FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6B5A914E2BABADA0003EA4FC /* Data.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Data.swift; sourceTree = "<group>"; };
 		6B75AF8E2BA4E058002A7893 /* MeshNetworkTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeshNetworkTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshNetworkTestApp.swift; sourceTree = "<group>"; };
 		6B75AF952BA4E05C002A7893 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6B75AF982BA4E05C002A7893 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		6B89B73B2BA6A2CF0092B742 /* MessageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageManager.swift; sourceTree = "<group>"; };
-		6B89B73F2BA6A2E20092B742 /* MeshNetworkTestModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshNetworkTestModels.swift; sourceTree = "<group>"; };
 		6B89B7412BA6A2ED0092B742 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		6B89B7432BA6A3180092B742 /* PeerConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionView.swift; sourceTree = "<group>"; };
 		6B89B7452BA6A33E0092B742 /* MessengerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessengerView.swift; sourceTree = "<group>"; };
@@ -51,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B8D698E2BAAA56B004DED8E /* SWIMNet.xcframework in Frameworks */,
+				6B5A91492BAB9C01003EA4FC /* SWIMNet.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,15 +83,17 @@
 		6B75AF902BA4E058002A7893 /* MeshNetworkTest */ = {
 			isa = PBXGroup;
 			children = (
+				6B5A914B2BABABB0003EA4FC /* Info.plist */,
 				6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */,
 				6B89B73B2BA6A2CF0092B742 /* MessageManager.swift */,
-				6B89B73F2BA6A2E20092B742 /* MeshNetworkTestModels.swift */,
 				6B89B7412BA6A2ED0092B742 /* ConnectionManager.swift */,
 				6B89B7432BA6A3180092B742 /* PeerConnectionView.swift */,
 				6B89B7452BA6A33E0092B742 /* MessengerView.swift */,
 				6B75AF952BA4E05C002A7893 /* Assets.xcassets */,
 				6B75AF972BA4E05C002A7893 /* Preview Content */,
 				6B89B76C2BAA59C30092B742 /* ChatView.swift */,
+				6B5A91472BAB7D7B003EA4FC /* Utils.swift */,
+				6B5A914E2BABADA0003EA4FC /* Data.swift */,
 			);
 			path = MeshNetworkTest;
 			sourceTree = "<group>";
@@ -181,10 +188,11 @@
 				6B89B7422BA6A2ED0092B742 /* ConnectionManager.swift in Sources */,
 				6B89B7462BA6A33E0092B742 /* MessengerView.swift in Sources */,
 				6B89B7442BA6A3180092B742 /* PeerConnectionView.swift in Sources */,
-				6B89B7402BA6A2E20092B742 /* MeshNetworkTestModels.swift in Sources */,
 				6B89B76D2BAA59C30092B742 /* ChatView.swift in Sources */,
 				6B89B73C2BA6A2CF0092B742 /* MessageManager.swift in Sources */,
 				6B75AF922BA4E058002A7893 /* MeshNetworkTestApp.swift in Sources */,
+				6B5A91482BAB7D7B003EA4FC /* Utils.swift in Sources */,
+				6B5A914F2BABADA0003EA4FC /* Data.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -325,6 +333,7 @@
 					"$(PROJECT_DIR)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeshNetworkTest/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -358,6 +367,7 @@
 					"$(PROJECT_DIR)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeshNetworkTest/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

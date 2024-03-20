@@ -10,9 +10,12 @@ import SwiftUI
 @main
 struct MeshNetworkTestApp: App {
     @StateObject private var connectionManager = ConnectionManager(displayName: UIDevice.current.name)
+//    @StateObject private var connectionManager = createMockConnectionManager()
     var body: some Scene {
         WindowGroup {
-            MessengerView().environmentObject(connectionManager)
+            NavigationStack {
+                MessengerView().environmentObject(connectionManager)
+            }
         }
     }
 }
