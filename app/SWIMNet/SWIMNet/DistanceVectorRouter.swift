@@ -105,7 +105,8 @@ public actor DistanceVectorRoutingNode<
         selfId: PeerId,
         dvUpdateThreshold: UInt,
         linkCosts: LinkCosts = [:],
-        sendDelegate: SendDelegateClass
+        sendDelegate: SendDelegateClass,
+        updateDelegate: (any AvailableNodesUpdateDelegate)? = nil
     ) {
         self.selfId = selfId
         distanceVector = [
@@ -121,6 +122,7 @@ public actor DistanceVectorRoutingNode<
 
         self.linkCosts = linkCosts
         self.sendDelegate = sendDelegate
+        self.updateDelegate = updateDelegate
     }
 
     public func recvDistanceVector(

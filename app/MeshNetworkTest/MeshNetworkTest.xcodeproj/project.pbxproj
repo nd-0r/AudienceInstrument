@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		6B5A91482BAB7D7B003EA4FC /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B5A91472BAB7D7B003EA4FC /* Utils.swift */; };
-		6B5A91492BAB9C01003EA4FC /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */; };
-		6B5A914A2BAB9C01003EA4FC /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6B5A914F2BABADA0003EA4FC /* Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B5A914E2BABADA0003EA4FC /* Data.swift */; };
+		6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; };
+		6B5E02E02BABFBA300F72BA8 /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6B75AF922BA4E058002A7893 /* MeshNetworkTestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */; };
 		6B75AF962BA4E05C002A7893 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B75AF952BA4E05C002A7893 /* Assets.xcassets */; };
 		6B75AF992BA4E05C002A7893 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B75AF982BA4E05C002A7893 /* Preview Assets.xcassets */; };
@@ -28,7 +28,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				6B5A914A2BAB9C01003EA4FC /* SWIMNet.xcframework in Embed Frameworks */,
+				6B5E02E02BABFBA300F72BA8 /* SWIMNet.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -39,6 +39,7 @@
 		6B5A91472BAB7D7B003EA4FC /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
 		6B5A914B2BABABB0003EA4FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6B5A914E2BABADA0003EA4FC /* Data.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Data.swift; sourceTree = "<group>"; };
+		6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SWIMNet.xcframework; path = ../SWIMNet/xcframeworks/SWIMNet.xcframework; sourceTree = "<group>"; };
 		6B75AF8E2BA4E058002A7893 /* MeshNetworkTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeshNetworkTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshNetworkTestApp.swift; sourceTree = "<group>"; };
 		6B75AF952BA4E05C002A7893 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -48,7 +49,6 @@
 		6B89B7432BA6A3180092B742 /* PeerConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerConnectionView.swift; sourceTree = "<group>"; };
 		6B89B7452BA6A33E0092B742 /* MessengerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessengerView.swift; sourceTree = "<group>"; };
 		6B89B76C2BAA59C30092B742 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SWIMNet.xcframework; path = ../SWIMNet/xcframeworks/SWIMNet.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B5A91492BAB9C01003EA4FC /* SWIMNet.xcframework in Frameworks */,
+				6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,7 +109,7 @@
 		6B89B7482BA6AA230092B742 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				6B8D698D2BAAA56B004DED8E /* SWIMNet.xcframework */,
+				6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

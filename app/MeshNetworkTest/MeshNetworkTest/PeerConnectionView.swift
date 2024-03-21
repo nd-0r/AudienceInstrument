@@ -15,6 +15,7 @@ struct PeerConnectionStatusView: View {
 
     var body: some View {
         Button {
+            print("DID SELECT")
             didSelectCallback()
         } label: {
             HStack {

@@ -20,7 +20,6 @@ class ConnectionManager: ObservableObject {
 
     private(set) var selfId: MCPeerID
     internal var routingNode: DistanceVectorRoutingNode<Int, UInt64, DVNodeSendDelegate>?
-    private var routingNodeUpdateDelegate: NodeUpdateDelegate?
 
     internal var browser: MCNearbyServiceBrowser?
     private var browserDelegate: NearbyServiceBrowserDelegate?
@@ -53,12 +52,13 @@ class ConnectionManager: ObservableObject {
         selfId = MCPeerID(displayName: displayName)
 
         let routingNodeSendDelegate = DVNodeSendDelegate()
+        let routingNodeUpdateDelegate = NodeUpdateDelegate()
         routingNode = DistanceVectorRoutingNode(
             selfId: selfId.hashValue,
             dvUpdateThreshold: 1,
-            sendDelegate: routingNodeSendDelegate
+            sendDelegate: routingNodeSendDelegate,
+            updateDelegate: routingNodeUpdateDelegate
         )
-        routingNodeUpdateDelegate = NodeUpdateDelegate()
 
         browser = MCNearbyServiceBrowser(
             peer: selfId,
@@ -68,7 +68,7 @@ class ConnectionManager: ObservableObject {
 
         advertiser = MCNearbyServiceAdvertiser(
             peer: self.selfId,
-            discoveryInfo: nil /* TODO */,
+            discoveryInfo: ["app": "MeshNetworkTest"],
             serviceType: kServiceType
         )
         advertiserDelegate = NearbyServiceAdvertiserDelegate()
@@ -78,7 +78,7 @@ class ConnectionManager: ObservableObject {
         session!.delegate = self.sessionDelegate
 
         routingNodeSendDelegate.owner = self
-        self.routingNodeUpdateDelegate!.owner = self
+        routingNodeUpdateDelegate.owner = self
         browserDelegate!.owner = self
         advertiserDelegate!.owner = self
         sessionDelegate!.owner = self
@@ -115,12 +115,19 @@ class ConnectionManager: ObservableObject {
         browser!.stopBrowsingForPeers()
     }
 
-    public func connect(toPeer: MCPeerID) {
+    public func connect(toPeer peer: MCPeerID) {
+        // Make sure peer is discovered but not connected
+        guard sessionPeers[peer] == MCSessionState.notConnected else {
+            return
+        }
+
+        print("INVITING OTHER PEER TO SESSION")
+
         browser!.invitePeer(
-            toPeer,
+            peer,
             to: session!,
             withContext: nil /* TODO */,
-            timeout: TimeInterval(5.0)
+            timeout: TimeInterval(30.0)
         )
     }
 
@@ -155,12 +162,20 @@ class ConnectionManager: ObservableObject {
         }
 
         func availableNodesDidUpdate(newAvailableNodes: [any SWIMNet.PeerIdT]) {
-            for node in newAvailableNodes {
-                if owner?.allNodes[node as! Int] == nil {
-                    owner!.allNodes[node as! Int] = NodeMessageManager(
-                        peerId: node as! Int,
-                        connectionManager: self.owner!
-                    )
+            print("AVAILABLE NODES UPDATED WITH \(newAvailableNodes)")
+            DispatchQueue.main.async { @MainActor in
+                for node in newAvailableNodes {
+                    // Don't include self
+                    guard (node as! Int) != self.owner!.selfId.hashValue else {
+                        continue
+                    }
+
+                    if self.owner?.allNodes[node as! Int] == nil {
+                        self.owner!.allNodes[node as! Int] = NodeMessageManager(
+                            peerId: node as! Int,
+                            connectionManager: self.owner!
+                        )
+                    }
                 }
             }
         }
@@ -182,6 +197,8 @@ class ConnectionManager: ObservableObject {
                   session === self.owner!.session else {
                 return
             }
+
+            print("Session state changed for \(peerID) from \(self.owner!.sessionPeers[peerID]) to \(state)")
 
             DispatchQueue.main.async { @MainActor in
                 self.owner!.sessionPeers[peerID] = state
@@ -216,6 +233,7 @@ class ConnectionManager: ObservableObject {
 
             switch magic {
             case self.owner!.kNetworkLevelMagic:
+                print("RECEIVING DV")
                 Task {
                     let decoder = JSONDecoder()
                     let dv = try decoder.decode(
@@ -227,12 +245,15 @@ class ConnectionManager: ObservableObject {
                         from: data.suffix(from: 1)
                     )
 
+                    print("RECEIVED DV \(dv)")
+
                     await self.owner!.routingNode!.recvDistanceVector(
                         fromNeighbor: peerID.hashValue,
                         withDistanceVector: dv
                     )
                 }
             case self.owner!.kApplicationLevelMagic:
+                print("RECEIVING MESSAGE")
                 // Forward to message manager
                 DispatchQueue.main.async { Task { @MainActor in
                     let decoder = JSONDecoder()
@@ -240,6 +261,8 @@ class ConnectionManager: ObservableObject {
                         NodeMessageManager.NodeMessage.self,
                         from: data.suffix(from: 1)
                     )
+
+                    print("RECEIVED MESSAGE \(nodeMessage)")
 
                     self.owner!.allNodes[nodeMessage.from]?
                         .recvMessage(message: nodeMessage.message)
@@ -364,6 +387,14 @@ class ConnectionManager: ObservableObject {
             }
 
             print("FOUND PEER")
+            print("\(peerID)")
+            print("\(peerID.hashValue)")
+            print("\(info)")
+            print("")
+
+            guard info?["app"] == "MeshNetworkTest" else {
+                return
+            }
 
             self.owner!.peersByHash[peerID.hashValue] = peerID
 
@@ -373,10 +404,7 @@ class ConnectionManager: ObservableObject {
             }
 
             // Automatically reconnect if the peer was connected before
-            if !self.owner!.previouslyConnectedPeers.contains(peerID) && (
-                self.owner!.sessionPeers[peerID] == nil ||
-                self.owner!.sessionPeers[peerID] == MCSessionState.notConnected
-            ) {
+            if self.owner!.previouslyConnectedPeers.contains(peerID) {
                 self.owner!.connect(toPeer: peerID)
             }
         }
@@ -389,6 +417,7 @@ class ConnectionManager: ObservableObject {
                   browser === self.owner!.browser else {
                 return
             }
+            print("LOST PEER")
 
             self.owner!.peersByHash.removeValue(forKey: peerID.hashValue)
 
@@ -423,15 +452,13 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
+            print("INVITED TO SESSION")
+
             // TODO use context (untrusted!)
 
             invitationHandler(true, self.owner!.session)
 
             self.owner!.peersByHash[peerID.hashValue] = peerID
-
-            DispatchQueue.main.async { @MainActor in
-                self.owner!.sessionPeers[peerID] = MCSessionState.connecting
-            }
         }
     }
 }

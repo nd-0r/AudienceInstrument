@@ -35,7 +35,7 @@ class NodeMessageManager: ObservableObject {
 
         DispatchQueue.main.async { [self] in Task {@MainActor in
             if (try? await connectionManager!.send(
-                messageData: NodeMessage(from: peerId, message: message),
+                messageData: NodeMessage(from: connectionManager!.selfId.hashValue, message: message),
                 toPeer: peerId,
                 with: MCSessionSendDataMode.reliable
             )) != nil {
