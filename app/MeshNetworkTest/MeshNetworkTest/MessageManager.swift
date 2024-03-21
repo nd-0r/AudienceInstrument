@@ -10,7 +10,8 @@ import MultipeerConnectivity
 
 class NodeMessageManager: ObservableObject {
     @Published internal var messages: [String] = []
-    private var peerId: Int
+    @Published internal var available: Bool = true
+    internal let peerId: Int
     internal var connectionManager: ConnectionManager?
 
     struct NodeMessage: Codable {

@@ -139,7 +139,7 @@ public actor DistanceVectorRoutingNode<
             }
 
             if addedOrRemovedPeers {
-                self.updateDelegate?.availableNodesDidUpdate(newAvailableNodes: Array(self.distanceVector.keys))
+                callUpdateDelegateWithAvailablePeers()
             }
         }
 
@@ -213,7 +213,7 @@ public actor DistanceVectorRoutingNode<
             }
 
             if addedOrRemovedPeers {
-                self.updateDelegate?.availableNodesDidUpdate(newAvailableNodes: Array(self.distanceVector.keys))
+                callUpdateDelegateWithAvailablePeers()
             }
         }
 
@@ -280,6 +280,11 @@ public actor DistanceVectorRoutingNode<
                 }
             }
         }
+    }
+
+    private func callUpdateDelegateWithAvailablePeers() {
+        let availableNodes = Array(self.distanceVector.filter({ $1.cost != Cost.max }).keys)
+        self.updateDelegate?.availableNodesDidUpdate(newAvailableNodes: availableNodes)
     }
     
     /// Computes a forwarding entry or none at all from a given entry and candidate information

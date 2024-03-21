@@ -13,7 +13,7 @@ struct MessengerView: View {
     var body: some View {
         VStack {
             ScrollView {
-                ForEach(Array(connectionManager.allNodes.keys), id: \.self) { key in
+                ForEach(Array(connectionManager.allNodes.filter( { $1.available == true }).keys), id: \.self) { key in
                     NavigationLink(destination: ChatView(
                         messageManager: connectionManager.allNodes[key]!
                     )) {

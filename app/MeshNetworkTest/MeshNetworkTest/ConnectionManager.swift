@@ -177,6 +177,12 @@ class ConnectionManager: ObservableObject {
                         )
                     }
                 }
+
+                for (_, nodeMessageManager) in self.owner!.allNodes {
+                    if !newAvailableNodes.contains(where: { $0 as! Int == nodeMessageManager.peerId}) {
+                        nodeMessageManager.available = false
+                    }
+                }
             }
         }
     }
@@ -198,7 +204,7 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
-            print("Session state changed for \(peerID) from \(self.owner!.sessionPeers[peerID]) to \(state)")
+            print("Session state changed for \(peerID) from \(self.owner!.sessionPeers[peerID]!) to \(state)")
 
             DispatchQueue.main.async { @MainActor in
                 self.owner!.sessionPeers[peerID] = state
@@ -419,11 +425,11 @@ class ConnectionManager: ObservableObject {
             }
             print("LOST PEER")
 
-            self.owner!.peersByHash.removeValue(forKey: peerID.hashValue)
-
-            DispatchQueue.main.async { @MainActor in
-                self.owner!.sessionPeers.removeValue(forKey: peerID)
-            }
+//            self.owner!.peersByHash.removeValue(forKey: peerID.hashValue)
+//
+//            DispatchQueue.main.async { @MainActor in
+//                self.owner!.sessionPeers.removeValue(forKey: peerID)
+//            }
         }
     }
 
