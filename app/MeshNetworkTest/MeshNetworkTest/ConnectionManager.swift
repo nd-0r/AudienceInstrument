@@ -86,7 +86,6 @@ class ConnectionManager: ObservableObject {
         browser!.delegate = self.browserDelegate
         advertiser!.delegate = self.advertiserDelegate
 
-        browser!.startBrowsingForPeers()
         advertiser!.startAdvertisingPeer()
     }
 
@@ -96,6 +95,23 @@ class ConnectionManager: ObservableObject {
         }
 
         advertiser!.stopAdvertisingPeer()
+    }
+    
+    public func startBrowsingAndAdvertising() -> Self {
+        guard debugUI == false else {
+            return self
+        }
+
+        browser!.startBrowsingForPeers()
+
+        return self
+    }
+
+    public func stopBrowsingAndAdvertising() {
+        guard debugUI == false else {
+            return
+        }
+
         browser!.stopBrowsingForPeers()
     }
 
@@ -167,7 +183,10 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
-            self.owner!.sessionPeers[peerID] = state
+            DispatchQueue.main.async { @MainActor in
+                self.owner!.sessionPeers[peerID] = state
+            }
+
             Task {
                 switch state {
                 case .notConnected:
@@ -215,7 +234,7 @@ class ConnectionManager: ObservableObject {
                 }
             case self.owner!.kApplicationLevelMagic:
                 // Forward to message manager
-                Task { @MainActor in
+                DispatchQueue.main.async { Task { @MainActor in
                     let decoder = JSONDecoder()
                     let nodeMessage = try decoder.decode(
                         NodeMessageManager.NodeMessage.self,
@@ -224,7 +243,7 @@ class ConnectionManager: ObservableObject {
 
                     self.owner!.allNodes[nodeMessage.from]?
                         .recvMessage(message: nodeMessage.message)
-                }
+                }}
             default:
                 fatalError("Unexpected magic byte in data ConnectionManager.SessionDelegate.session")
                 // Don't forward to user: Not tagged correctly
@@ -344,10 +363,12 @@ class ConnectionManager: ObservableObject {
                 return
             }
 
+            print("FOUND PEER")
+
             self.owner!.peersByHash[peerID.hashValue] = peerID
 
             // TODO use discovery info
-            Task { @MainActor in
+            DispatchQueue.main.async { @MainActor in
                 self.owner!.sessionPeers[peerID] = MCSessionState.notConnected
             }
 
@@ -371,7 +392,7 @@ class ConnectionManager: ObservableObject {
 
             self.owner!.peersByHash.removeValue(forKey: peerID.hashValue)
 
-            Task { @MainActor in
+            DispatchQueue.main.async { @MainActor in
                 self.owner!.sessionPeers.removeValue(forKey: peerID)
             }
         }
@@ -408,7 +429,7 @@ class ConnectionManager: ObservableObject {
 
             self.owner!.peersByHash[peerID.hashValue] = peerID
 
-            Task { @MainActor in
+            DispatchQueue.main.async { @MainActor in
                 self.owner!.sessionPeers[peerID] = MCSessionState.connecting
             }
         }

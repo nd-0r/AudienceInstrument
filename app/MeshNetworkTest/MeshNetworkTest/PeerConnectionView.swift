@@ -41,6 +41,7 @@ struct PeerConnectionStatusView: View {
 
 struct PeerConnectionView: View {
     @EnvironmentObject var connectionManager: ConnectionManager
+    @State var connecting = true
 
     var body: some View {
         ScrollView {
@@ -51,9 +52,22 @@ struct PeerConnectionView: View {
                 PeerConnectionStatusView(
                     status: connectionManager.sessionPeers[mcPeerId]!,
                     clientName: mcPeerId.displayName,
-                    didSelectCallback: { }
+                    didSelectCallback: { connectionManager.connect(toPeer: mcPeerId) }
                 )
             }
+        }
+        .alert(isPresented: $connecting) {
+            Alert(
+                title: Text("Searching"),
+                message: Text("Searching for peers to connect to"),
+                dismissButton: Alert.Button.default(
+                    Text("Stop Searching"),
+                    action: {
+                        connecting = false
+                        connectionManager.stopBrowsingAndAdvertising()
+                    }
+                )
+            )
         }
     }
 }

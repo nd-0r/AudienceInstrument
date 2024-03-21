@@ -23,7 +23,7 @@ class NodeMessageManager: ObservableObject {
         self.connectionManager = connectionManager
     }
 
-    // Must be isolated to @MainActor
+    // Must be isolated to @MainActor and run on the main dispatch queue
     func recvMessage(message: String) {
         self.messages.append(message)
     }
@@ -33,7 +33,7 @@ class NodeMessageManager: ObservableObject {
             return
         }
 
-        Task {@MainActor in
+        DispatchQueue.main.async { [self] in Task {@MainActor in
             if (try? await connectionManager!.send(
                 messageData: NodeMessage(from: peerId, message: message),
                 toPeer: peerId,
@@ -41,6 +41,6 @@ class NodeMessageManager: ObservableObject {
             )) != nil {
                 self.messages.append(message)
             }
-        }
+        }}
     }
 }
