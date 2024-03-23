@@ -91,11 +91,11 @@ public actor DistanceVectorRoutingNode<
         return distanceVector
     }
 
-    private func getSendDelegate() -> SendDelegateClass {
+    private func getSendDelegate() -> SendDelegateClass? {
         return sendDelegate
     }
 
-    public var sendDelegate: SendDelegateClass {
+    public var sendDelegate: SendDelegateClass? {
         didSet { sendDistanceVectorToPeers() }
     }
 
@@ -105,7 +105,7 @@ public actor DistanceVectorRoutingNode<
         selfId: PeerId,
         dvUpdateThreshold: UInt,
         linkCosts: LinkCosts = [:],
-        sendDelegate: SendDelegateClass,
+        sendDelegate: SendDelegateClass? = nil,
         updateDelegate: (any AvailableNodesUpdateDelegate)? = nil
     ) {
         self.selfId = selfId
@@ -258,12 +258,16 @@ public actor DistanceVectorRoutingNode<
     private func sendDistanceVectorToPeers(
         excluding nodesToExclude: Set<PeerId> = Set()
     ) {
+        guard self.sendDelegate != nil else {
+            return
+        }
+
         distanceVectorSenderQueue.async { [
             nodesToExclude = nodesToExclude,
             selfId = self.selfId,
             linkCosts = self.linkCosts,
             distanceVector = self.distanceVector,
-            sendDelegate = self.sendDelegate
+            sendDelegate = self.sendDelegate!
         ] in
             Task {
                 for (peerId, cost) in linkCosts {

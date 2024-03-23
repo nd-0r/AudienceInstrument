@@ -57,6 +57,9 @@ struct PeerConnectionView: View {
                 )
             }
         }
+        .onAppear() {
+            connectionManager.startBrowsingAndAdvertising()
+        }
         .alert(isPresented: $connecting) {
             Alert(
                 title: Text("Searching"),

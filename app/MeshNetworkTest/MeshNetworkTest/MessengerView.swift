@@ -31,7 +31,7 @@ struct MessengerView: View {
             }
             Spacer()
             HStack {
-                NavigationLink(destination: PeerConnectionView().environmentObject(connectionManager.startBrowsingAndAdvertising())) {
+                NavigationLink(destination: PeerConnectionView().environmentObject(connectionManager)) {
                     Text("Connect")
                         .foregroundStyle(.blue)
                         .bold()
