@@ -11,16 +11,10 @@ import MultipeerConnectivity
 class NodeMessageManager: ObservableObject {
     @Published internal var messages: [String] = []
     @Published internal var available: Bool = true
-    internal let peerId: Int
+    internal let peerId: ConnectionManager.PeerId
     internal var connectionManager: ConnectionManager?
 
-    struct NodeMessage: Codable {
-        let from: Int
-        let to: Int
-        let message: String
-    }
-
-    init(peerId: Int, connectionManager: ConnectionManager? = nil) {
+    init(peerId: ConnectionManager.PeerId, connectionManager: ConnectionManager? = nil) {
         self.peerId = peerId
         self.connectionManager = connectionManager
     }
@@ -37,8 +31,8 @@ class NodeMessageManager: ObservableObject {
 
         DispatchQueue.main.async { [self] in Task {@MainActor in
             if (try? await connectionManager!.send(
-                messageData: NodeMessage(from: connectionManager!.selfId.hashValue, to: peerId, message: message),
                 toPeer: peerId,
+                message: message,
                 with: MCSessionSendDataMode.reliable
             )) != nil {
                 self.messages.append(message)

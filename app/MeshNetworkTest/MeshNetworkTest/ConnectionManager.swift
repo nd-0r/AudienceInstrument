@@ -8,6 +8,18 @@
 import Foundation
 import MultipeerConnectivity
 import SWIMNet
+import Darwin.Mach
+
+extension ForwardingEntry: ForwardingEntryProtocol {
+    init(linkID: Int64, cost: UInt64) {
+        self.linkID = linkID
+        self.cost = cost
+    }
+    
+    var description: String {
+        ""
+    }
+}
 
 class ConnectionManager:
     NSObject,
@@ -16,33 +28,59 @@ class ConnectionManager:
     MCNearbyServiceBrowserDelegate,
     MCNearbyServiceAdvertiserDelegate
 {
-    @Published internal var sessionPeers: [MCPeerID:MCSessionState] = [:]
-    @Published internal var allNodes: [Int:NodeMessageManager] = [:]
+    internal typealias PeerId = Int64
+    internal typealias Cost = UInt64
+
+    @Published internal var sessionPeers: [MCPeerID:MCSessionState] = [:] // update unit
+    @Published internal var allNodes: [PeerId:NodeMessageManager] = [:] // update unit
 
     private let debugUI: Bool
 
-    internal var peersByHash: [Int:MCPeerID] = [:]
+    internal var peersByHash: [PeerId:MCPeerID] = [:] // update unit
     private var previouslyConnectedPeers: Set<MCPeerID> = Set()
 
     private(set) var selfId: MCPeerID
-    internal var routingNode: DistanceVectorRoutingNode<Int, UInt64, DVNodeSendDelegate>?
+
+//    internal struct ForwardingEntry: ForwardingEntryProtocol {
+//        var linkId: ConnectionManager.PeerId
+//        
+//        var cost: ConnectionManager.Cost
+//        
+//        init(linkId: ConnectionManager.PeerId, cost: ConnectionManager.Cost) {
+//            self.linkId = linkId
+//            self.cost = cost
+//        }
+//        
+//        typealias P = PeerId
+//        typealias C = Cost
+//
+//        var description: String {
+//            "LinkID: \(self.linkId), Cost: \(self.cost)"
+//        }
+//    }
+    internal var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>?
 
     internal var browser: MCNearbyServiceBrowser?
 
     internal var advertiser: MCNearbyServiceAdvertiser?
 
-    internal var sessionsByPeer: [MCPeerID:MCSession] = [:]
+    internal var sessionsByPeer: [MCPeerID:MCSession] = [:] // update unit
 
-    private let kApplicationLevelMagic: UInt8 = 0x00
-    private let kNetworkLevelMagic: UInt8 = 0xff
-    private let kUnknownMagic: UInt8 = 0xaa
-
-    private let jsonEncoder = JSONEncoder()
+    // sequence number for identifying latency messages
+    private let kEWMAFactor: Double = 0.875
+    @Published internal var estimatedLatencyByPeerInNs: [MCPeerID:Double?] = [:] // update unit
+    private var pingTimer: Timer?
+    private let kPingInterval: TimeInterval = 1.0
+    private var pingStartTimeNs: UInt64?
+    private var pingSeqNum: UInt32 = 0
+    private let pingSemaphore: DispatchSemaphore = DispatchSemaphore(value: 1)
+    private var expectedPingReplies: UInt = 0
+    private var currPingReplies: UInt = 0
 
     init(
         displayName: String,
         debugSessionPeers: [MCPeerID:MCSessionState],
-        debugAllNodes: [Int:NodeMessageManager]
+        debugAllNodes: [PeerId:NodeMessageManager]
     ) {
         debugUI = true
         selfId = MCPeerID(displayName: displayName)
@@ -57,7 +95,7 @@ class ConnectionManager:
         let sendDelegate = DVNodeSendDelegate()
         let updateDelegate = NodeUpdateDelegate()
         routingNode = DistanceVectorRoutingNode(
-            selfId: selfId.hashValue,
+            selfId: Int64(selfId.hashValue),
             dvUpdateThreshold: 1,
             sendDelegate: sendDelegate,
             updateDelegate: updateDelegate
@@ -74,8 +112,23 @@ class ConnectionManager:
             serviceType: kServiceType
         )
 
+        pingTimer = nil
+
         // `self` initialized now
         super.init()
+
+        pingTimer = Timer.scheduledTimer(
+            withTimeInterval: kPingInterval,
+            repeats: true
+        ) { _ in
+            weak var weakTimerOwner = self
+            if let owner = weakTimerOwner {
+                Task {
+                    owner.initiateLatencyTest()
+                }
+            }
+        }
+
 
         sendDelegate.owner = self
         updateDelegate.owner = self
@@ -91,6 +144,7 @@ class ConnectionManager:
             return
         }
 
+        pingTimer!.invalidate()
         advertiser!.stopAdvertisingPeer()
     }
     
@@ -139,10 +193,6 @@ class ConnectionManager:
     }
 
     public func disconnect(fromPeer peer: MCPeerID) {
-        guard debugUI != nil else {
-            return
-        }
-
         guard sessionPeers[peer] != nil else {
             print("TRIED TO DISCONNECT FROM PEER NOT DISCOVERED.")
             return
@@ -152,21 +202,21 @@ class ConnectionManager:
             session.disconnect()
             self.sessionsByPeer.removeValue(forKey: peer)
         }
-        self.peersByHash.removeValue(forKey: peer.hashValue)
+        self.peersByHash.removeValue(forKey: Int64(peer.hashValue))
 
         DispatchQueue.main.async { @MainActor in
-            self.allNodes.removeValue(forKey: peer.hashValue)
+            self.allNodes.removeValue(forKey: Int64(peer.hashValue))
             self.sessionPeers.removeValue(forKey: peer)
         }
 
         Task {
-            try await self.routingNode!.updateLinkCost(linkId: peer.hashValue, newCost: nil)
+            try await self.routingNode!.updateLinkCost(linkId: Int64(peer.hashValue), newCost: nil)
         }
     }
 
     public func send(
-        messageData: NodeMessageManager.NodeMessage,
-        toPeer peerId: Int,
+        toPeer peerId: PeerId,
+        message: String,
         with reliability: MCSessionSendDataMode
     ) async throws {
         guard debugUI == false else {
@@ -188,13 +238,16 @@ class ConnectionManager:
             return
         }
 
-        let data = try jsonEncoder.encode(messageData)
+        let data: Data = try MessageWrapper.with {
+            $0.type = .messenger
+            $0.data = .messengerMessage(MessengerMessage.with {
+                $0.from = Int64(selfId.hashValue)
+                $0.to = Int64(peerId)
+                $0.message = message
+            })
+        }.serializedData()
 
-        try session.send(
-            Data(repeating: kApplicationLevelMagic, count: 1) + data,
-            toPeers: [peerObj],
-            with: reliability
-        )
+        try session.send(data, toPeers: [peerObj], with: reliability)
     }
 
     func session(
@@ -219,16 +272,16 @@ class ConnectionManager:
         switch state {
         case .notConnected:
             Task {
-                try await self.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
+                try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: nil)
             }
         case .connecting:
             Task {
-                try await self.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: nil)
+                try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: nil)
             }
         case .connected:
             self.previouslyConnectedPeers.insert(peerID)
             Task {
-                try await self.routingNode!.updateLinkCost(linkId: peerID.hashValue, newCost: 1 /* TODO */)
+                try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: 1 /* TODO */)
             }
         @unknown default:
             fatalError("Unkonwn peer state in ConnectionManager.session")
@@ -245,55 +298,48 @@ class ConnectionManager:
             fatalError("Received session callback from peer which has not been discovered.")
         }
 
-        let magic = data.first ?? self.kUnknownMagic
+        guard let message = try? MessageWrapper(serializedData: data) else {
+            fatalError("Received malformed data")
+        }
 
-        switch magic {
-        case self.kNetworkLevelMagic:
-            print("RECEIVING DV")
+        switch message.type {
+        case MessageType.network:
+            let networkMessage = message.networkMessage
             Task {
-                let decoder = JSONDecoder()
-                let dv = try decoder.decode(
-                    DistanceVectorRoutingNode<
-                        Int,
-                        UInt64,
-                        ConnectionManager.DVNodeSendDelegate
-                    >.DistanceVector.self,
-                    from: data.suffix(from: 1)
-                )
-
-                print("RECEIVED DV \(dv)")
-
+                print("RECEIVED DV \(networkMessage.distanceVector)")
                 await self.routingNode!.recvDistanceVector(
-                    fromNeighbor: peerID.hashValue,
-                    withDistanceVector: dv
+                    fromNeighbor: Int64(peerID.hashValue),
+                    withDistanceVector: networkMessage.distanceVector
                 )
             }
-        case self.kApplicationLevelMagic:
+        case MessageType.measurement:
+            print("LATENCY REPLY")
+            let measurementMessage = message.measurementMessage
+
+            if measurementMessage.initiatingPeerID == self.selfId.hashValue {
+                completeLatencyTest(fromPeer: peerID, withSeqNum: measurementMessage.sequenceNumber)
+            } else {
+                // reply to the ping
+                try? session.send(data, toPeers: [peerID], with: .unreliable)
+            }
+        case MessageType.messenger:
             print("RECEIVING MESSAGE")
             // Forward to message manager
+            let messengerMessage = message.messengerMessage
             DispatchQueue.main.async { Task { @MainActor in
-                let decoder = JSONDecoder()
-                let nodeMessage = try decoder.decode(
-                    NodeMessageManager.NodeMessage.self,
-                    from: data.suffix(from: 1)
-                )
-
-                if nodeMessage.to == self.selfId.hashValue {
-                    print("RECEIVED MESSAGE \(nodeMessage)")
-                    self.allNodes[nodeMessage.from]?
-                        .recvMessage(message: nodeMessage.message)
+                if messengerMessage.to == self.selfId.hashValue {
+                    self.allNodes[messengerMessage.from]?
+                        .recvMessage(message: messengerMessage.message)
                 } else {
-                    print("FORWARDED MESSAGE \(nodeMessage)")
                     try await self.send(
-                        messageData: nodeMessage,
-                        toPeer: nodeMessage.to,
-                        with: MCSessionSendDataMode.reliable
+                        toPeer: messengerMessage.to,
+                        message: messengerMessage.message,
+                        with: .reliable
                     )
                 }
-
             }}
         default:
-            fatalError("Unexpected magic byte in data ConnectionManager.SessionDelegate.session")
+            fatalError("Unexpected message type in ConnectionManager.SessionDelegate.session")
             // Don't forward to user: Not tagged correctly
         }
     }
@@ -359,7 +405,7 @@ class ConnectionManager:
             return
         }
 
-        self.peersByHash[peerID.hashValue] = peerID
+        self.peersByHash[Int64(peerID.hashValue)] = peerID
 
         DispatchQueue.main.async { @MainActor in
             self.sessionPeers[peerID] = MCSessionState.notConnected
@@ -420,7 +466,7 @@ class ConnectionManager:
         self.sessionsByPeer[peerID] = newSession
         invitationHandler(true, newSession)
 
-        self.peersByHash[peerID.hashValue] = peerID
+        self.peersByHash[Int64(peerID.hashValue)] = peerID
     }
 
     internal class DVNodeSendDelegate: SendDelegate {
@@ -434,9 +480,9 @@ class ConnectionManager:
         func send(
             from: any SWIMNet.PeerIdT,
             sendTo peerId: any SWIMNet.PeerIdT,
-            withDVDict dv: any Sendable & Codable
+            withDVDict dv: any Sendable
         ) async throws {
-            guard let peerId = self.owner!.peersByHash[peerId as! Int] else {
+            guard let peerId = self.owner!.peersByHash[peerId as! PeerId] else {
                 fatalError("TRIED TO SEND DISTANCE VECTOR TO UNDISCOVERED PEER")
             }
 
@@ -444,9 +490,15 @@ class ConnectionManager:
                 fatalError("TRIED TO SEND DISTANCE VECTOR TO PEER WITHOUT SESSION")
             }
 
-            let jsonData = try jsonEncoder.encode(dv)
+            let data = try! MessageWrapper.with {
+                $0.type = .network
+                $0.data = .networkMessage(NetworkMessage.with {
+                    $0.distanceVector = (dv as! DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>.DistanceVector)
+                })
+            }.serializedData()
+
             try session.send(
-                Data(repeating: self.owner!.kNetworkLevelMagic, count: 1) + jsonData,
+                data,
                 toPeers: [peerId],
                 with: MCSessionSendDataMode.reliable
             )
@@ -465,24 +517,101 @@ class ConnectionManager:
             DispatchQueue.main.async { @MainActor in
                 for node in newAvailableNodes {
                     // Don't include self
-                    guard (node as! Int) != self.owner!.selfId.hashValue else {
+                    guard (node as! PeerId) != self.owner!.selfId.hashValue else {
                         continue
                     }
 
-                    if self.owner!.allNodes[node as! Int] == nil {
-                        self.owner!.allNodes[node as! Int] = NodeMessageManager(
-                            peerId: node as! Int,
+                    if self.owner!.allNodes[node as! PeerId] == nil {
+                        self.owner!.allNodes[node as! PeerId] = NodeMessageManager(
+                            peerId: node as! PeerId,
                             connectionManager: self.owner!
                         )
                     }
                 }
 
                 for (_, nodeMessageManager) in self.owner!.allNodes {
-                    if !newAvailableNodes.contains(where: { $0 as! Int == nodeMessageManager.peerId}) {
+                    if !newAvailableNodes.contains(where: { $0 as! PeerId == nodeMessageManager.peerId}) {
                         nodeMessageManager.available = false
                     }
                 }
             }
+        }
+    }
+
+    private func initiateLatencyTest() {
+        // FIXME need to lock `sessionsByPeer` in this function
+
+        // Make sure that `pingStartTimeNs` is valid for
+        // `kPingInterval / 2` seconds, then continue anyway with a new sequence
+        // number
+        _ = pingSemaphore.wait(timeout: DispatchTime(uptimeNanoseconds: UInt64(1_000_000_000 * kPingInterval / 2.0)))
+        pingSeqNum += 1
+        expectedPingReplies = UInt(sessionsByPeer.count)
+
+        var timeBaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timeBaseInfo)
+        let timeUnits = mach_absolute_time()
+        pingStartTimeNs = timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+
+        let data = try! MessageWrapper.with {
+            $0.type = .measurement
+            $0.data = .measurementMessage(MeasurementMessage.with {
+                $0.initiatingPeerID = Int64(selfId.hashValue)
+                $0.sequenceNumber = pingSeqNum
+            })
+        }.serializedData()
+
+        Task {
+            try! await withThrowingTaskGroup(of: Void.self) { group in
+                for (neighborId, neighborSession) in sessionsByPeer {
+                    group.addTask {
+                        try neighborSession.send(
+                            data,
+                            toPeers: [neighborId],
+                            with: .unreliable
+                        )
+                    }
+                }
+
+                try await group.waitForAll()
+            }
+        }
+    }
+
+    private func completeLatencyTest(fromPeer: MCPeerID, withSeqNum seqNum: UInt32) {
+        // FIXME need to lock `sessionsByPeer` in this function
+
+        guard seqNum == pingSeqNum else {
+            return
+        }
+
+        guard let currPingStartTimeNs = pingStartTimeNs else {
+            // received uninitiated latency message with correct sequence number
+            return
+        }
+
+        // Must be still connected to the peer to record latency
+        guard sessionsByPeer.contains(where: { $0.key == fromPeer }) else {
+            return
+        }
+
+        var timeBaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timeBaseInfo)
+        let timeUnits = mach_absolute_time()
+        let currPingEndTimeNs = timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+        let currLatency = Double(currPingEndTimeNs - currPingStartTimeNs) / 2.0
+
+        if let lastLatency = estimatedLatencyByPeerInNs[fromPeer] {
+            estimatedLatencyByPeerInNs[fromPeer] =
+                (kEWMAFactor * lastLatency!) + ((1.0 - kEWMAFactor) * currLatency)
+        } else {
+            estimatedLatencyByPeerInNs[fromPeer] = currLatency
+        }
+
+        currPingReplies += 1
+        if currPingReplies == expectedPingReplies {
+            currPingReplies = 0
+            pingSemaphore.signal()
         }
     }
 }

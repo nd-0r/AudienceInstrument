@@ -28,12 +28,12 @@ func createMockConnectionManager() -> ConnectionManager {
     ]
 
     let allNodes = [
-        n[0].hashValue:NodeMessageManager(peerId: n[0].hashValue),
-        n[1].hashValue:NodeMessageManager(peerId: n[1].hashValue),
-        n[2].hashValue:NodeMessageManager(peerId: n[2].hashValue),
-        n[3].hashValue:NodeMessageManager(peerId: n[3].hashValue),
-        n[4].hashValue:NodeMessageManager(peerId: n[4].hashValue),
-        n[5].hashValue:NodeMessageManager(peerId: n[5].hashValue)
+        Int64(n[0].hashValue):NodeMessageManager(peerId: Int64(n[0].hashValue)),
+        Int64(n[1].hashValue):NodeMessageManager(peerId: Int64(n[1].hashValue)),
+        Int64(n[2].hashValue):NodeMessageManager(peerId: Int64(n[2].hashValue)),
+        Int64(n[3].hashValue):NodeMessageManager(peerId: Int64(n[3].hashValue)),
+        Int64(n[4].hashValue):NodeMessageManager(peerId: Int64(n[4].hashValue)),
+        Int64(n[5].hashValue):NodeMessageManager(peerId: Int64(n[5].hashValue))
     ]
 
     let debugUIConnectionManager = ConnectionManager(

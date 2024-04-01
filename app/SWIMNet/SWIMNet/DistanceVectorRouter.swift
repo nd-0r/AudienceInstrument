@@ -19,23 +19,18 @@ extension UInt32: UIntLike {}
 extension UInt64: UIntLike {}
 public typealias CostT = UIntLike & UnsignedInteger & FixedWidthInteger & Sendable & Codable
 
-
-public struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>:
+public protocol ForwardingEntryProtocol:
     Sendable,
     Equatable,
-    CustomStringConvertible,
-    Codable
+    CustomStringConvertible
 {
-    var linkId: PeerId
-    var cost: Cost
-    public var description: String {
-        "NextHop: \(linkId) Cost: \(cost)"
-    }
+    associatedtype P: PeerIdT
+    associatedtype C: CostT
 
-    init(linkId: PeerId, cost: Cost) {
-        self.linkId = linkId
-        self.cost = cost
-    }
+    var linkID: P { get set }
+    var cost: C { get set}
+
+    init(linkID: P, cost: C)
 }
 
 public protocol SendDelegate {
@@ -43,7 +38,7 @@ public protocol SendDelegate {
     func send(
         from: any PeerIdT,
         sendTo peerId: any PeerIdT,
-        withDVDict dv: any Sendable & Codable
+        withDVDict dv: any Sendable
     ) async throws -> Void
 }
 
@@ -74,9 +69,10 @@ public enum DistanceVectorRoutingNodeError: Error {
 public actor DistanceVectorRoutingNode<
     PeerId: PeerIdT,
     Cost: CostT,
-    SendDelegateClass: SendDelegate
-> {
-    public typealias DVEnt = ForwardingEntry<PeerId, Cost>
+    SendDelegateClass: SendDelegate,
+    ForwardingEntry: ForwardingEntryProtocol
+> where ForwardingEntry.P == PeerId, ForwardingEntry.C == Cost {
+    public typealias DVEnt = ForwardingEntry
     public typealias DistanceVector = [PeerId:DVEnt]
     public typealias LinkCosts = [PeerId:Cost]
 
@@ -110,12 +106,12 @@ public actor DistanceVectorRoutingNode<
     ) {
         self.selfId = selfId
         distanceVector = [
-            selfId: ForwardingEntry(linkId: selfId, cost: 0),
+            selfId: ForwardingEntry(linkID: selfId, cost: 0),
         ]
 
         for (linkId, linkCost) in linkCosts {
             distanceVector[linkId] = ForwardingEntry(
-                linkId: linkId,
+                linkID: linkId,
                 cost: linkCost
             )
         }
@@ -152,10 +148,10 @@ public actor DistanceVectorRoutingNode<
                 if linkCosts[destId] != nil {
                     // can still reach host through direct link
                     // assuming that each host has a maximum 1 link to neighbors
-                    distanceVector[destId] = ForwardingEntry(linkId: destId, cost: linkCosts[destId]!)
-                } else if existingEntry?.linkId == peerId {
+                    distanceVector[destId] = ForwardingEntry(linkID: destId, cost: linkCosts[destId]!)
+                } else if existingEntry?.linkID == peerId {
                     // route to host is down
-                    distanceVector[destId] = ForwardingEntry(linkId: peerId, cost: Cost.max)
+                    distanceVector[destId] = ForwardingEntry(linkID: peerId, cost: Cost.max)
                     addedOrRemovedPeers = true
                     toExclude.insert(peerId)
                 } else {
@@ -182,7 +178,7 @@ public actor DistanceVectorRoutingNode<
 
             let new_cost = candidate_cost + linkCost!
 
-            if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
+            if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass, ForwardingEntry>.computeForwardingEntry(
                 fromNeighbor: peerId,
                 toPeer: destId,
                 withCost: new_cost,
@@ -219,9 +215,9 @@ public actor DistanceVectorRoutingNode<
 
         guard newCost != nil else {
             for (destId, forwardingEntry) in self.distanceVector {
-                if forwardingEntry.linkId == linkId {
+                if forwardingEntry.linkID == linkId {
                     // Tombstone the destination because the neighbor is unreachable
-                    distanceVector[destId] = ForwardingEntry(linkId: linkId, cost: Cost.max)
+                    distanceVector[destId] = ForwardingEntry(linkID: linkId, cost: Cost.max)
                     addedOrRemovedPeers = true
                 }
             }
@@ -230,7 +226,7 @@ public actor DistanceVectorRoutingNode<
         }
 
         // Calculate new forwarding entry for direct link to neighbor
-        if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass>.computeForwardingEntry(
+        if let (newEntry, entryAddedOrRemoved) = DistanceVectorRoutingNode<PeerId, Cost, SendDelegateClass, ForwardingEntry>.computeForwardingEntry(
             fromNeighbor: linkId,
             toPeer: linkId,
             withCost: newCost!,
@@ -249,7 +245,7 @@ public actor DistanceVectorRoutingNode<
                 return nil
             }
 
-            return (entry.linkId, entry.cost)
+            return (entry.linkID, entry.cost)
         }
 
         return nil
@@ -307,21 +303,21 @@ public actor DistanceVectorRoutingNode<
         fromNeighbor peerId: PeerId,
         toPeer destId: PeerId,
         withCost cost: Cost,
-        givenExistingEntry forwardingEntry: ForwardingEntry<PeerId, Cost>?,
+        givenExistingEntry forwardingEntry: ForwardingEntry?,
         givenDirectLinkToDest linkCost: Cost?
-    ) -> (ForwardingEntry<PeerId, Cost>, Bool)? {
+    ) -> (ForwardingEntry, Bool)? {
         guard forwardingEntry != nil else {
-            return (ForwardingEntry(linkId: peerId, cost: cost), true)
+            return (ForwardingEntry(linkID: peerId, cost: cost), true)
         }
 
         if (cost < forwardingEntry!.cost) {
-            return (ForwardingEntry(linkId: peerId, cost: cost), false)
+            return (ForwardingEntry(linkID: peerId, cost: cost), false)
         } else if (cost == forwardingEntry!.cost &&
-                   peerId < forwardingEntry!.linkId) {
-            return (ForwardingEntry(linkId: peerId, cost: cost), false)
-        } else if (peerId == forwardingEntry!.linkId &&
+                   peerId < forwardingEntry!.linkID) {
+            return (ForwardingEntry(linkID: peerId, cost: cost), false)
+        } else if (peerId == forwardingEntry!.linkID &&
                    cost > forwardingEntry!.cost) {
-            return (ForwardingEntry(linkId: peerId, cost: cost), false)
+            return (ForwardingEntry(linkID: peerId, cost: cost), false)
         }
 
         return nil // Did not update anything

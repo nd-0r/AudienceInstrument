@@ -8,7 +8,7 @@
 import Mockingbird
 import SwiftGraph
 import XCTest
-@testable import SWIMNet
+@testable @preconcurrency import SWIMNet
 
 func logMessage(_ message: String, to output: FileHandle) {
     if let data = message.data(using: .utf8) {
@@ -65,16 +65,28 @@ public final class AtomicTimedInteger {
     }
 }
 
+fileprivate struct ForwardingEntry<PeerId: PeerIdT, Cost: CostT>: ForwardingEntryProtocol {
+    public var linkID: PeerId
+    public var cost: Cost
+    public var description: String {
+        "NextHop: \(linkID) Cost: \(cost)"
+    }
+
+    init(linkID: PeerId, cost: Cost) {
+        self.linkID = linkID
+        self.cost = cost
+    }
+}
 
 final class DistanceVectorNodeTests: XCTestCase {
     private typealias NodeID = String
     private typealias DVDict = Dictionary<NodeID, ForwardingEntry<NodeID, Cost>>
     typealias Cost = UInt32
     let mockSendDelegate = mock(SendDelegate.self)
-    var dVNode: DistanceVectorRoutingNode<String, Cost, SendDelegateMock>?
+    private var dVNode: DistanceVectorRoutingNode<String, Cost, SendDelegateMock, ForwardingEntry<NodeID, Cost>>?
 
     override func setUpWithError() throws {
-        dVNode = DistanceVectorRoutingNode<NodeID, Cost, SendDelegateMock>.init(
+        dVNode = DistanceVectorRoutingNode<NodeID, Cost, SendDelegateMock, ForwardingEntry<NodeID, Cost>>.init(
             selfId: "A",
             dvUpdateThreshold: 0,
             linkCosts: [:],
@@ -102,10 +114,10 @@ final class DistanceVectorNodeTests: XCTestCase {
         XCTAssertEqual(linkToB, "B")
         let expectedDVTo_B: DVDict = [
             "A": ForwardingEntry(
-                linkId: "A", cost: 0
+                linkID: "A", cost: 0
             ),
             "B": ForwardingEntry(
-                linkId: "B", cost: 8
+                linkID: "B", cost: 8
             )
         ]
 
@@ -129,10 +141,10 @@ final class DistanceVectorNodeTests: XCTestCase {
         // since the cost decreased, this should trigger a send
         let expectedDVTo_B: DVDict = [
             "A": ForwardingEntry(
-                linkId: "A", cost: 0
+                linkID: "A", cost: 0
             ),
             "B": ForwardingEntry(
-                linkId: "B", cost: 5
+                linkID: "B", cost: 5
             )
         ]
         try await Task.sleep(nanoseconds: 100000000)
@@ -155,10 +167,10 @@ final class DistanceVectorNodeTests: XCTestCase {
         XCTAssertEqual(linkToB, "B")
         let expectedDVTo_B: DVDict = [
             "A": ForwardingEntry(
-                linkId: "A", cost: 0
+                linkID: "A", cost: 0
             ),
             "B": ForwardingEntry(
-                linkId: "B", cost: 8
+                linkID: "B", cost: 8
             )
         ]
         try await Task.sleep(nanoseconds: 100000000)
@@ -204,15 +216,15 @@ final class DistanceVectorNodeTests: XCTestCase {
         Cost from A to C: 12
          */
         let dVFrom_B: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: 7)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: 7)
         ]
         let expectedDVTo_Neighbors: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 0),
-            "B": ForwardingEntry(linkId: "B", cost: 5),
-            "C": ForwardingEntry(linkId: "B", cost: 12),
-            "D": ForwardingEntry(linkId: "D", cost: 3)
+            "A": ForwardingEntry(linkID: "A", cost: 0),
+            "B": ForwardingEntry(linkID: "B", cost: 5),
+            "C": ForwardingEntry(linkID: "B", cost: 12),
+            "D": ForwardingEntry(linkID: "D", cost: 3)
         ]
 
         try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
@@ -242,12 +254,12 @@ final class DistanceVectorNodeTests: XCTestCase {
         D <-> A <-> B
          */
         let dVFrom_B: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0)
         ]
         let dVFrom_D: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 3),
-            "D": ForwardingEntry(linkId: "D", cost: 0)
+            "A": ForwardingEntry(linkID: "A", cost: 3),
+            "D": ForwardingEntry(linkID: "D", cost: 0)
         ]
 
         try await dVNode!.updateLinkCost(linkId: "B", newCost: 5)
@@ -288,9 +300,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B1: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: 7)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: 7)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -298,9 +310,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         )
 
         let dVFrom_B2: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: Cost.max)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: Cost.max)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -308,10 +320,10 @@ final class DistanceVectorNodeTests: XCTestCase {
         )
 
         let expectedDVTo_Neighbors: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 0),
-            "B": ForwardingEntry(linkId: "B", cost: 5),
-            "C": ForwardingEntry(linkId: "C", cost: 13),
-            "D": ForwardingEntry(linkId: "D", cost: 3)
+            "A": ForwardingEntry(linkID: "A", cost: 0),
+            "B": ForwardingEntry(linkID: "B", cost: 5),
+            "C": ForwardingEntry(linkID: "C", cost: 13),
+            "D": ForwardingEntry(linkID: "D", cost: 3)
         ]
 
         try await Task.sleep(nanoseconds: 100000000)
@@ -341,9 +353,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B1: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: 7)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: 7)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -351,9 +363,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         )
 
         let dVFrom_B2: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: Cost.max)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: Cost.max)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -361,9 +373,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         )
 
         let expectedDVTo_Neighbors: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 0),
-            "B": ForwardingEntry(linkId: "B", cost: 5),
-            "D": ForwardingEntry(linkId: "D", cost: 3)
+            "A": ForwardingEntry(linkID: "A", cost: 0),
+            "B": ForwardingEntry(linkID: "B", cost: 5),
+            "D": ForwardingEntry(linkID: "D", cost: 3)
         ]
 
         try await Task.sleep(nanoseconds: 100000000)
@@ -392,9 +404,9 @@ final class DistanceVectorNodeTests: XCTestCase {
         try await dVNode!.updateLinkCost(linkId: "D", newCost: 3)
 
         let dVFrom_B: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 5),
-            "B": ForwardingEntry(linkId: "B", cost: 0),
-            "C": ForwardingEntry(linkId: "C", cost: 7)
+            "A": ForwardingEntry(linkID: "A", cost: 5),
+            "B": ForwardingEntry(linkID: "B", cost: 0),
+            "C": ForwardingEntry(linkID: "C", cost: 7)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "B",
@@ -405,9 +417,9 @@ final class DistanceVectorNodeTests: XCTestCase {
 
         // receive distance vector from unknown host
         let dVFrom_E: DVDict = [
-            "F": ForwardingEntry(linkId: "F", cost: 37),
-            "G": ForwardingEntry(linkId: "G", cost: 41),
-            "H": ForwardingEntry(linkId: "H", cost: 43)
+            "F": ForwardingEntry(linkID: "F", cost: 37),
+            "G": ForwardingEntry(linkID: "G", cost: 41),
+            "H": ForwardingEntry(linkID: "H", cost: 43)
         ]
         await dVNode!.recvDistanceVector(
             fromNeighbor: "E",
@@ -415,10 +427,10 @@ final class DistanceVectorNodeTests: XCTestCase {
         )
 
         let expectedDVTo_Neighbors: DVDict = [
-            "A": ForwardingEntry(linkId: "A", cost: 0),
-            "B": ForwardingEntry(linkId: "B", cost: Cost.max),
-            "C": ForwardingEntry(linkId: "B", cost: Cost.max),
-            "D": ForwardingEntry(linkId: "D", cost: 3)
+            "A": ForwardingEntry(linkID: "A", cost: 0),
+            "B": ForwardingEntry(linkID: "B", cost: Cost.max),
+            "C": ForwardingEntry(linkID: "B", cost: Cost.max),
+            "D": ForwardingEntry(linkID: "D", cost: 3)
         ]
 
         try await Task.sleep(nanoseconds: 100000000)
@@ -453,7 +465,7 @@ where NodeId: PeerIdT & Decodable & Encodable,
         func send(
             from: any SWIMNet.PeerIdT,
             sendTo peerId: any SWIMNet.PeerIdT,
-            withDVDict dv: Sendable & Codable
+            withDVDict dv: Sendable
         ) async throws {
             guard owner != nil else {
                 return
@@ -468,13 +480,13 @@ where NodeId: PeerIdT & Decodable & Encodable,
         }
     }
 
-    enum TestError: Error {
+    fileprivate enum TestError: Error {
         case failure(String, DVNode.DistanceVector, DVNode.DistanceVector)
     }
 
     var networkGraph: WeightedGraph<NodeId, Cost>
-    typealias DVNode = DistanceVectorRoutingNode<NodeId, Cost, SendDelegateMock>
-    var dVNodes: [NodeId:DVNode] = [:]
+    fileprivate typealias DVNode = DistanceVectorRoutingNode<NodeId, Cost, SendDelegateMock, ForwardingEntry<NodeId, Cost>>
+    fileprivate var dVNodes: [NodeId:DVNode] = [:]
     var sendDelegateMock: SendDelegateMock
     private var gossips = AtomicTimedInteger(value: 0)
 
@@ -590,7 +602,7 @@ where NodeId: PeerIdT & Decodable & Encodable,
                     (
                         networkGraph.vertexAtIndex(neighborEdge.v),
                         ForwardingEntry(
-                            linkId: networkGraph.vertexAtIndex(neighborEdge.v),
+                            linkID: networkGraph.vertexAtIndex(neighborEdge.v),
                             cost: neighborEdge.weight
                         )
                     )
@@ -602,12 +614,12 @@ where NodeId: PeerIdT & Decodable & Encodable,
                 //   goes through `neighborVertex` of `vertex`
                 for nodeIdOnNeighborPath in dijkstraPathDictBFS(start: neighborVertex, dijkstraPathDict: shortestPaths[vertex]!.1) {
                     expectedFTableEntryList[nodeIdOnNeighborPath] = ForwardingEntry(
-                        linkId: neighborVertex,
+                        linkID: neighborVertex,
                         cost: shortestPaths[vertex]!.0[networkGraph.indexOfVertex(nodeIdOnNeighborPath)!]!
                     )
                 }
             }
-            expectedFTableEntryList[vertex] = ForwardingEntry(linkId: vertex, cost: 0)
+            expectedFTableEntryList[vertex] = ForwardingEntry(linkID: vertex, cost: 0)
 
             /*
             let actualFTableEntryList = await dVNodes[vertex]!.distanceVector
@@ -629,11 +641,11 @@ where NodeId: PeerIdT & Decodable & Encodable,
 
             for (dest, entry) in expectedFTableEntryList {
                 if let (actualLink, actualCost) = await dVNodes[vertex]!.getLinkForDest(dest: dest) {
-                    guard entry.linkId == actualLink && entry.cost == actualCost else {
+                    guard entry.linkID == actualLink && entry.cost == actualCost else {
                         throw TestError.failure(
                             """
                             Entry mismatch for node \(vertex) and destination \(dest): \
-                            Expected entry with link \(entry.linkId) and cost \
+                            Expected entry with link \(entry.linkID) and cost \
                             \(entry.cost) but got entry with link \
                             \(actualLink) and cost \(actualCost)
                             """,
@@ -645,7 +657,7 @@ where NodeId: PeerIdT & Decodable & Encodable,
                     throw TestError.failure(
                         """
                         Entry mismatch for node \(vertex) and destination \(dest): \
-                        Expected entry with link \(entry.linkId) and cost \
+                        Expected entry with link \(entry.linkID) and cost \
                         \(entry.cost) but got no entry
                         """,
                         expectedFTableEntryList,

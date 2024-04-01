@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+enum MessageType {
+   MESSAGETYPE_NETWORK = 0;
+   MESSAGETYPE_MEASUREMENT = 1;
+   MESSAGETYPE_MESSENGER = 2;
+}
+
+message ForwardingEntry {
+   int64 linkID = 1;
+   uint64 cost = 2;
+}
+
+message NetworkMessage {
+   map<int64, ForwardingEntry> distanceVector = 1;
+}
+
+message MeasurementMessage {
+   uint32 sequenceNumber = 1;
+   int64 initiatingPeerId = 2;
+}
+
+message MessengerMessage {
+   int64 from = 1;
+   int64 to = 2;
+   string message = 3;
+}
+
+message MessageWrapper {
+   MessageType type = 1;
+
+   oneof data {
+      NetworkMessage networkMessage = 2;
+      MeasurementMessage measurementMessage = 3;
+      MessengerMessage messengerMessage = 4;
+      // more later?
+   }
+}
+
