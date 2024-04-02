@@ -8,14 +8,14 @@
 import SwiftUI
 
 struct MessengerView: View {
-    @EnvironmentObject var connectionManager: ConnectionManager
+    @EnvironmentObject var connectionManagerModel: ConnectionManagerModel
 
     var body: some View {
         VStack {
             ScrollView {
-                ForEach(Array(connectionManager.allNodes.filter( { $1.available == true }).keys), id: \.self) { key in
+                ForEach(Array(connectionManagerModel.allNodes.filter( { $1.available == true }).keys), id: \.self) { key in
                     NavigationLink(destination: ChatView(
-                        messageManager: connectionManager.allNodes[key]!
+                        messageManager: connectionManagerModel.allNodes[key]!
                     )) {
                         HStack {
                             Spacer()
@@ -31,7 +31,7 @@ struct MessengerView: View {
             }
             Spacer()
             HStack {
-                NavigationLink(destination: PeerConnectionView().environmentObject(connectionManager)) {
+                NavigationLink(destination: PeerConnectionView().environmentObject(connectionManagerModel)) {
                     Text("Connect")
                         .foregroundStyle(.blue)
                         .bold()
@@ -45,7 +45,7 @@ struct MessengerView: View {
 struct MessengerView_Previews: PreviewProvider {
     static var previews: some View {
         return MessengerView()
-            .environmentObject(createMockConnectionManager())
+            .environmentObject(createMockConnectionManagerModel())
     }
 }
 

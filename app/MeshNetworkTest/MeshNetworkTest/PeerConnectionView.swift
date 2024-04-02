@@ -11,6 +11,7 @@ import MultipeerConnectivity
 struct PeerConnectionStatusView: View {
     var status: MCSessionState
     var clientName: String
+    var clientLatencyInNs: Double?
     var didSelectCallback: () -> Void
 
     var body: some View {
@@ -22,6 +23,10 @@ struct PeerConnectionStatusView: View {
                 Text(clientName)
                     .foregroundStyle(.blue)
                 Spacer()
+                if clientLatencyInNs != nil {
+                    Text("\(clientLatencyInNs! / 1_000_000.0)ms")
+                    Spacer()
+                }
             }
             switch status {
             case MCSessionState.connected:
@@ -41,24 +46,25 @@ struct PeerConnectionStatusView: View {
 }
 
 struct PeerConnectionView: View {
-    @EnvironmentObject var connectionManager: ConnectionManager
+    @EnvironmentObject var connectionManagerModel: ConnectionManagerModel
     @State var connecting = true
 
     var body: some View {
         ScrollView {
             ForEach(
-                Array(connectionManager.sessionPeers.keys),
+                Array(connectionManagerModel.sessionPeers.keys),
                 id: \.self
             ) { mcPeerId in
                 PeerConnectionStatusView(
-                    status: connectionManager.sessionPeers[mcPeerId]!,
+                    status: connectionManagerModel.sessionPeers[mcPeerId]!,
                     clientName: mcPeerId.displayName,
-                    didSelectCallback: { connectionManager.connect(toPeer: mcPeerId) }
+                    clientLatencyInNs: connectionManagerModel.estimatedLatencyByPeerInNs[mcPeerId],
+                    didSelectCallback: { connectionManagerModel.connect(toPeer: mcPeerId) }
                 )
             }
         }
         .onAppear() {
-            connectionManager.startBrowsingAndAdvertising()
+            connectionManagerModel.startBrowsing()
         }
         .alert(isPresented: $connecting) {
             Alert(
@@ -68,7 +74,7 @@ struct PeerConnectionView: View {
                     Text("Stop Searching"),
                     action: {
                         connecting = false
-                        connectionManager.stopBrowsingAndAdvertising()
+                        connectionManagerModel.stopBrowsing()
                     }
                 )
             )
@@ -77,9 +83,12 @@ struct PeerConnectionView: View {
 }
 
 struct PeerConnectionView_Previews: PreviewProvider {
+    static func getEnvironmentObject() {
+        
+    }
     static var previews: some View {
         return PeerConnectionView()
-            .environmentObject(createMockConnectionManager())
+            .environmentObject(createMockConnectionManagerModel())
     }
 }
 

@@ -65,8 +65,8 @@ struct ChatView: View {
 
 struct ChatView_Previews: PreviewProvider {
     static var previews: some View {
-        let mockConnectionManager = createMockConnectionManager()
-        return ChatView(messageManager: Array(mockConnectionManager.allNodes.values)[0])
+        let mockConnectionManagerModel = createMockConnectionManagerModel()
+        return ChatView(messageManager: Array(mockConnectionManagerModel.allNodes.values)[0])
     }
 }
 

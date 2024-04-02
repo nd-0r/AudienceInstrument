@@ -8,7 +8,7 @@
 import Foundation
 import MultipeerConnectivity
 
-func createMockConnectionManager() -> ConnectionManager {
+@MainActor func createMockConnectionManagerModel() -> ConnectionManagerModel {
     let n = [ // Theoretically available nodes
         /* 0 */ MCPeerID(displayName: "Peer 1"), // connected peer
         /* 1 */ MCPeerID(displayName: "Peer 2"), // connecting peer
@@ -36,14 +36,23 @@ func createMockConnectionManager() -> ConnectionManager {
         Int64(n[5].hashValue):NodeMessageManager(peerId: Int64(n[5].hashValue))
     ]
 
-    let debugUIConnectionManager = ConnectionManager(
-        displayName: "Peer 0",
-        debugSessionPeers: sessionPeers,
-        debugAllNodes: allNodes
+    let estimatedLatencyByPeerInNs: [MCPeerID:Double] = [
+        n[1]: 8_000_135,
+        n[2]: 5_047_300,
+        n[3]: 6_200_140,
+        n[5]: 11_000_930,
+        n[6]: 10_750_333
+    ]
+
+    let debugConnectionManagerModel = ConnectionManagerModel(
+        sessionPeers: sessionPeers,
+        allNodes: allNodes,
+        estimatedLatencyByPeerInNs: estimatedLatencyByPeerInNs,
+        debugUI: true
     )
 
     for (_, nodeMessageManager) in allNodes {
-        nodeMessageManager.connectionManager = debugUIConnectionManager
+        nodeMessageManager.connectionManagerModel = debugConnectionManagerModel
     }
 
     let sampleMessages = [
@@ -58,5 +67,5 @@ func createMockConnectionManager() -> ConnectionManager {
         messageManager.messages = sampleMessages
     }
 
-    return debugUIConnectionManager
+    return debugConnectionManagerModel
 }
