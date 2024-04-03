@@ -6,8 +6,8 @@
 	<string>Bonjour is necessary for discovering other local peers to build the mesh network.</string>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_andreworals-MNT._tcp</string>
-		<string>_andreworals-MNT._udp</string>
+		<string>_andreworals-AIn._tcp</string>
+		<string>_andreworals-AIn._udp</string>
 	</array>
 </dict>
 </plist>

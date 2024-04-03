@@ -1,6 +1,6 @@
 //
 //  ConnectionManager.swift
-//  MeshNetworkTest
+//  AudienceInstrument
 //
 //  Created by Andrew Orals on 3/16/24.
 //
@@ -111,7 +111,7 @@ actor ConnectionManager:
 
         advertiser = MCNearbyServiceAdvertiser(
             peer: selfId,
-            discoveryInfo: ["app": "MeshNetworkTest"],
+            discoveryInfo: ["app": kDiscoveryApp],
             serviceType: kServiceType
         )
 
@@ -445,7 +445,7 @@ actor ConnectionManager:
             print("")
 
             // Advertisement must be from an instance of this app
-            guard info?["app"] == "MeshNetworkTest" else {
+            guard info?["app"] == kDiscoveryApp else {
                 return
             }
 

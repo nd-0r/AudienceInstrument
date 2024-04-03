@@ -1,6 +1,6 @@
 //
 //  ChatView.swift
-//  MeshNetworkTest
+//  AudienceInstrument
 //
 //  Created by Andrew Orals on 3/19/24.
 //

@@ -1,6 +1,6 @@
 //
 //  Data.swift
-//  MeshNetworkTest
+//  AudienceInstrument
 //
 //  Created by Andrew Orals on 3/20/24.
 //
@@ -8,7 +8,8 @@
 import Foundation
 import MultipeerConnectivity
 
-let kServiceType = "andreworals-MNT"
+let kServiceType = "andreworals-AIn"
+let kDiscoveryApp = "AudienceInstrument"
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
     @Published var sessionPeers: [MCPeerID : MCSessionState]
