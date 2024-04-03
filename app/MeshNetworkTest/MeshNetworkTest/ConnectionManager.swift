@@ -261,7 +261,6 @@ actor ConnectionManager:
         }
 
         let data: Data = try MessageWrapper.with {
-            $0.type = .messenger
             $0.data = .messengerMessage(MessengerMessage.with {
                 $0.from = Int64(selfId.hashValue)
                 $0.to = Int64(peerId)
@@ -335,28 +334,37 @@ actor ConnectionManager:
                 fatalError("Received malformed data")
             }
 
-            switch message.type {
-            case MessageType.network:
-                let networkMessage = message.networkMessage
+            switch message.data! {
+            case .networkMessage(let networkMessage):
                 print("RECEIVED DV \(networkMessage.distanceVector)")
                 await self.routingNode!.recvDistanceVector(
                     fromNeighbor: Int64(peerID.hashValue),
                     withDistanceVector: networkMessage.distanceVector
                 )
-            case MessageType.measurement:
-                print("LATENCY REPLY")
-                let measurementMessage = message.measurementMessage
+            case .measurementMessage(var measurementMessage):
+//                print("LATENCY REPLY")
+                let recvTimeInNs = Self.getCurrentTimeInNs()
 
                 if await measurementMessage.initiatingPeerID == self.selfId.hashValue {
-                    await completeLatencyTest(fromPeer: peerID, withSeqNum: measurementMessage.sequenceNumber)
+                    await completeLatencyTest(
+                        fromPeer: peerID,
+                        withSeqNum: measurementMessage.sequenceNumber,
+                        withReplyDelay: measurementMessage.delayInNs
+                    )
                 } else {
                     // reply to the ping
-                    try? session.send(data, toPeers: [peerID], with: .unreliable)
+                    measurementMessage.delayInNs = Self.getCurrentTimeInNs() - recvTimeInNs
+                    let outData = try! message.serializedData()
+
+                    do {
+                        try session.send(outData, toPeers: [peerID], with: .unreliable)
+                    } catch {
+                        print("Failed to reply to ping from \(peerID) with error: \(error)")
+                    }
                 }
-            case MessageType.messenger:
+            case .messengerMessage(let messengerMessage):
                 print("RECEIVING MESSAGE")
                 // Forward to message manager
-                let messengerMessage = message.messengerMessage
                 DispatchQueue.main.async { Task { @MainActor in
                     if await messengerMessage.to == self.selfId.hashValue {
                         model.allNodes[messengerMessage.from]?
@@ -552,7 +560,6 @@ actor ConnectionManager:
             }
 
             let data = try! MessageWrapper.with {
-                $0.type = .network
                 $0.data = .networkMessage(NetworkMessage.with {
                     $0.distanceVector = (dv as! DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>.DistanceVector)
                 })
@@ -643,14 +650,9 @@ actor ConnectionManager:
     private func initiateLatencyTest() async {
         pingSeqNum += 1
         expectedPingReplies = UInt(sessionsByPeer.count)
-
-        var timeBaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timeBaseInfo)
-        let timeUnits = mach_absolute_time()
-        pingStartTimeNs = timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+        pingStartTimeNs = Self.getCurrentTimeInNs()
 
         let data = try! MessageWrapper.with {
-            $0.type = .measurement
             $0.data = .measurementMessage(MeasurementMessage.with {
                 $0.initiatingPeerID = Int64(selfId.hashValue)
                 $0.sequenceNumber = pingSeqNum
@@ -680,9 +682,11 @@ actor ConnectionManager:
         }
     }
 
-    private func completeLatencyTest(fromPeer: MCPeerID, withSeqNum seqNum: UInt32) async {
-        // FIXME need to lock `sessionsByPeer` in this function
-
+    private func completeLatencyTest(
+        fromPeer: MCPeerID,
+        withSeqNum seqNum: UInt32,
+        withReplyDelay replyDelay: UInt64
+    ) async {
         guard seqNum == pingSeqNum else {
             // A message from a stray ping round shouldn't get past here
             return
@@ -703,11 +707,7 @@ actor ConnectionManager:
             return
         }
 
-        var timeBaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timeBaseInfo)
-        let timeUnits = mach_absolute_time()
-        let currPingEndTimeNs = timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
-        let currLatency = Double(currPingEndTimeNs - currPingStartTimeNs) / 2.0
+        let currLatency = Double(Self.getCurrentTimeInNs() - currPingStartTimeNs - replyDelay) / 2.0
 
         if let lastLatency = await model.estimatedLatencyByPeerInNs[fromPeer] {
             Task { @MainActor in
@@ -725,5 +725,14 @@ actor ConnectionManager:
             currPingReplies = 0
             pingSemaphore.signal()
         }
+    }
+
+    @inline(__always)
+    static private func getCurrentTimeInNs() -> UInt64 {
+        var timeBaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timeBaseInfo)
+        let timeUnits = mach_absolute_time()
+
+        return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
     }
 }

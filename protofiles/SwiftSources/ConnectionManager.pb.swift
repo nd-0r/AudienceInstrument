@@ -99,6 +99,8 @@ struct MeasurementMessage {
 
   var initiatingPeerID: Int64 = 0
 
+  var delayInNs: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -124,8 +126,6 @@ struct MessageWrapper {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
-
-  var type: MessageType = .network
 
   var data: MessageWrapper.OneOf_Data? = nil
 
@@ -284,6 +284,7 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "sequenceNumber"),
     2: .same(proto: "initiatingPeerId"),
+    3: .same(proto: "delayInNS"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -294,6 +295,7 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.sequenceNumber) }()
       case 2: try { try decoder.decodeSingularInt64Field(value: &self.initiatingPeerID) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
       default: break
       }
     }
@@ -306,12 +308,16 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if self.initiatingPeerID != 0 {
       try visitor.visitSingularInt64Field(value: self.initiatingPeerID, fieldNumber: 2)
     }
+    if self.delayInNs != 0 {
+      try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: MeasurementMessage, rhs: MeasurementMessage) -> Bool {
     if lhs.sequenceNumber != rhs.sequenceNumber {return false}
     if lhs.initiatingPeerID != rhs.initiatingPeerID {return false}
+    if lhs.delayInNs != rhs.delayInNs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -364,7 +370,6 @@ extension MessengerMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "MessageWrapper"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "type"),
     2: .same(proto: "networkMessage"),
     3: .same(proto: "measurementMessage"),
     4: .same(proto: "messengerMessage"),
@@ -376,7 +381,6 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularEnumField(value: &self.type) }()
       case 2: try {
         var v: NetworkMessage?
         var hadOneofValue = false
@@ -426,9 +430,6 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if self.type != .network {
-      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 1)
-    }
     switch self.data {
     case .networkMessage?: try {
       guard case .networkMessage(let v)? = self.data else { preconditionFailure() }
@@ -448,7 +449,6 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   }
 
   static func ==(lhs: MessageWrapper, rhs: MessageWrapper) -> Bool {
-    if lhs.type != rhs.type {return false}
     if lhs.data != rhs.data {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
