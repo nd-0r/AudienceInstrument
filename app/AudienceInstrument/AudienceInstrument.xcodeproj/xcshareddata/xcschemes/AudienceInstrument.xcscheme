@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "6B75AF8D2BA4E058002A7893"
-               BuildableName = "MeshNetworkTest.app"
-               BlueprintName = "MeshNetworkTest"
-               ReferencedContainer = "container:MeshNetworkTest.xcodeproj">
+               BuildableName = "AudienceInstrument.app"
+               BlueprintName = "AudienceInstrument"
+               ReferencedContainer = "container:AudienceInstrument.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6B75AF8D2BA4E058002A7893"
-            BuildableName = "MeshNetworkTest.app"
-            BlueprintName = "MeshNetworkTest"
-            ReferencedContainer = "container:MeshNetworkTest.xcodeproj">
+            BuildableName = "AudienceInstrument.app"
+            BlueprintName = "AudienceInstrument"
+            ReferencedContainer = "container:AudienceInstrument.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,9 +61,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6B75AF8D2BA4E058002A7893"
-            BuildableName = "MeshNetworkTest.app"
-            BlueprintName = "MeshNetworkTest"
-            ReferencedContainer = "container:MeshNetworkTest.xcodeproj">
+            BuildableName = "AudienceInstrument.app"
+            BlueprintName = "AudienceInstrument"
+            ReferencedContainer = "container:AudienceInstrument.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

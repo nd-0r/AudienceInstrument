@@ -42,7 +42,7 @@
 		6B5A914B2BABABB0003EA4FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6B5A914E2BABADA0003EA4FC /* Data.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Data.swift; sourceTree = "<group>"; };
 		6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SWIMNet.xcframework; path = ../SWIMNet/xcframeworks/SWIMNet.xcframework; sourceTree = "<group>"; };
-		6B75AF8E2BA4E058002A7893 /* MeshNetworkTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeshNetworkTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudienceInstrument.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B75AF912BA4E058002A7893 /* MeshNetworkTestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshNetworkTestApp.swift; sourceTree = "<group>"; };
 		6B75AF952BA4E05C002A7893 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6B75AF982BA4E05C002A7893 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -79,7 +79,7 @@
 		6B75AF8F2BA4E058002A7893 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6B75AF8E2BA4E058002A7893 /* MeshNetworkTest.app */,
+				6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -130,9 +130,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		6B75AF8D2BA4E058002A7893 /* MeshNetworkTest */ = {
+		6B75AF8D2BA4E058002A7893 /* AudienceInstrument */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6B75AF9C2BA4E05C002A7893 /* Build configuration list for PBXNativeTarget "MeshNetworkTest" */;
+			buildConfigurationList = 6B75AF9C2BA4E05C002A7893 /* Build configuration list for PBXNativeTarget "AudienceInstrument" */;
 			buildPhases = (
 				6B75AF8A2BA4E058002A7893 /* Sources */,
 				6B75AF8B2BA4E058002A7893 /* Frameworks */,
@@ -143,12 +143,12 @@
 			);
 			dependencies = (
 			);
-			name = MeshNetworkTest;
+			name = AudienceInstrument;
 			packageProductDependencies = (
 				6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */,
 			);
 			productName = MeshNetworkTest;
-			productReference = 6B75AF8E2BA4E058002A7893 /* MeshNetworkTest.app */;
+			productReference = 6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -166,7 +166,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 6B75AF892BA4E058002A7893 /* Build configuration list for PBXProject "MeshNetworkTest" */;
+			buildConfigurationList = 6B75AF892BA4E058002A7893 /* Build configuration list for PBXProject "AudienceInstrument" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -182,7 +182,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				6B75AF8D2BA4E058002A7893 /* MeshNetworkTest */,
+				6B75AF8D2BA4E058002A7893 /* AudienceInstrument */,
 			);
 		};
 /* End PBXProject section */
@@ -413,7 +413,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		6B75AF892BA4E058002A7893 /* Build configuration list for PBXProject "MeshNetworkTest" */ = {
+		6B75AF892BA4E058002A7893 /* Build configuration list for PBXProject "AudienceInstrument" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6B75AF9A2BA4E05C002A7893 /* Debug */,
@@ -422,7 +422,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6B75AF9C2BA4E05C002A7893 /* Build configuration list for PBXNativeTarget "MeshNetworkTest" */ = {
+		6B75AF9C2BA4E05C002A7893 /* Build configuration list for PBXNativeTarget "AudienceInstrument" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6B75AF9D2BA4E05C002A7893 /* Debug */,
