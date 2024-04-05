@@ -1,10 +1,6 @@
 syntax = "proto3";
 
-enum MessageType {
-   MESSAGETYPE_NETWORK = 0;
-   MESSAGETYPE_MEASUREMENT = 1;
-   MESSAGETYPE_MESSENGER = 2;
-}
+// MARK: Routing
 
 message ForwardingEntry {
    int64 linkID = 1;
@@ -15,11 +11,15 @@ message NetworkMessage {
    map<int64, ForwardingEntry> distanceVector = 1;
 }
 
+// MARK: Measurement
+
 message MeasurementMessage {
    uint32 sequenceNumber = 1;
    int64 initiatingPeerId = 2;
    uint64 delayInNS = 3;
 }
+
+// MARK: Messenger
 
 message MessengerMessage {
    int64 from = 1;
@@ -27,11 +27,40 @@ message MessengerMessage {
    string message = 3;
 }
 
+// MARK: Distance protocol
+
+message Init { }
+
+message InitAck { }
+
+message Speak { }
+
+message Spoke {
+   int64 delayInNS = 1;
+}
+
+message Done {
+   float distanceInM = 1;
+}
+
+message DistanceProtocolWrapper {
+   oneof state {
+      Init initState = 2;
+      InitAck initAckState = 3;
+      Speak speakState = 4;
+      Spoke spokeState = 5;
+      Done doneState = 6;
+   }
+}
+
+/////////////////////////////////////////////////////
+
 message MessageWrapper {
    oneof data {
       NetworkMessage networkMessage = 2;
       MeasurementMessage measurementMessage = 3;
       MessengerMessage messengerMessage = 4;
+      DistanceProtocolWrapper distanceProtocolMessage = 5;
       // more later?
    }
 }
