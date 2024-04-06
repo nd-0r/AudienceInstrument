@@ -8,12 +8,16 @@
 import Foundation
 import MultipeerConnectivity
 
-protocol DistanceManagerDelegate {
+protocol DistanceManagerSendDelegate {
     func sendInit(to: [DistanceManager.PeerID]) -> Void
     func sendInitAck(to: [DistanceManager.PeerID]) -> Void
     func sendSpeak(to: [DistanceManager.PeerID]) -> Void
     func sendSpoke(to: [DistanceManager.PeerID]) -> Void
     func sendDone(to: [DistanceManager.PeerID], withCalcDist: [DistanceManager.DistInMeters]) -> Void
+}
+
+protocol DistanceManagerUpdateDelegate {
+    func didUpdate(distancesByPeer: [DistanceManager.PeerID:DistanceManager.PeerDist])
 }
 
 enum DistanceManagerError: Error {
@@ -26,36 +30,44 @@ struct DistanceManager {
     typealias PeerID = MCPeerID
     typealias DistInMeters = Float
 
-    public static var uncalculatedPeers: Bool = false // FIXME
+    public enum PeerDist {
+        case noneCalculated
+        case someCalculated(DistInMeters)
+    }
 
-    public static func registerDelegate(delegate: any DistanceManagerDelegate) {
+    public static func registerSendDelegate(delegate: any DistanceManagerSendDelegate) {
         Self.dispatchQueue.async {
             DistanceManager.sendDelegate = delegate
         }
     }
 
-    /* FIXME
+    public static func registerUpdateDelegate(delegate: any DistanceManagerUpdateDelegate) {
+        Self.dispatchQueue.async {
+            DistanceManager.updateDelegate = delegate
+        }
+    }
+
     public static func addPeers(peers: [PeerID]) {
         Self.dispatchQueue.async {
             for peer in peers {
-                DistanceManager.distByPeer[peer] = .noneCalculated
+                Self.peersToAdd.insert(peer)
             }
         }
     }
-     */
 
-    /* FIXME
     public static func removePeers(peers: [PeerID]) {
         Self.dispatchQueue.async {
+            uncalculatedPeers =
             for peer in peers {
-                DistanceManager.distByPeer[peer] = nil
+                Self.peersToRemove.insert(peer)
             }
         }
     }
-     */
 
     public static func initiate(retries: UInt = 3) {
         Self.dispatchQueue.async {
+            updateDistByPeer()
+
             guard let actualSendDelegate = DistanceManager.sendDelegate else {
                 fatalError("Cannot possibly initiate distance measurement protocol without a send delegate.")
             }
@@ -102,6 +114,8 @@ struct DistanceManager {
     }
 
 // MARK: Private interface
+    private init() { }
+
     private static func scheduleTimeout(
         expectedStateByDeadline: Self.State,
         timeoutTargetState: Self.State,
@@ -262,10 +276,25 @@ struct DistanceManager {
         Self.sendDelegate?.sendDone(to: peerIDs, calculatedDistanceInM: calcDists)
 
         Self.dmState = .done
+
+        Self.updateDelegate?.didUpdate(distancesByPeer: Self.distByPeer)
     }
 
-    private init() { }
-    private static var sendDelegate: (any DistanceManagerDelegate)?
+    private static func updateDistByPeer() {
+        for peerToAdd in peersToAdd {
+            if self.distByPeer[peerToAdd] != nil {
+                continue
+            }
+            self.distByPeer[peerToAdd] = .noneCalculated
+        }
+
+        for peerToRemove in peersToRemove {
+            self.distByPeer[peerToRemove] = nil
+        }
+    }
+
+    private static var sendDelegate: (any DistanceManagerSendDelegate)?
+    private static var updateDelegate: (any DistanceManagerUpdateDelegate)?
     private static var dmState = State.done
     // A custom serial queue
     private static var dispatchQueue = DispatchQueue(
@@ -273,13 +302,8 @@ struct DistanceManager {
         qos: .userInitiated
     )
 
-    enum PeerDist {
-        case noneCalculated
-        case someCalculated(DistInMeters)
-    }
-
-    private static var peersToAdd: [PeerID] = [] // FIXME
-    private static var peersToRemove: [PeerID] = [] // FIXME
+    private static var peersToAdd: Set<PeerID> = []
+    private static var peersToRemove: Set<PeerID> = []
     private static var distByPeer: [PeerID:PeerDist] = [:]
 
     private enum InitiatorState {
