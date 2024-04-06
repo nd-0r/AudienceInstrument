@@ -44,12 +44,12 @@ message Done {
 }
 
 message DistanceProtocolWrapper {
-   oneof state {
-      Init initState = 2;
-      InitAck initAckState = 3;
-      Speak speakState = 4;
-      Spoke spokeState = 5;
-      Done doneState = 6;
+   oneof type {
+      Init init = 2;
+      InitAck initAck = 3;
+      Speak speak = 4;
+      Spoke spoke = 5;
+      Done done = 6;
    }
 }
 

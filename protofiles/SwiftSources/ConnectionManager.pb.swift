@@ -20,50 +20,6 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
-enum MessageType: SwiftProtobuf.Enum {
-  typealias RawValue = Int
-  case network // = 0
-  case measurement // = 1
-  case messenger // = 2
-  case UNRECOGNIZED(Int)
-
-  init() {
-    self = .network
-  }
-
-  init?(rawValue: Int) {
-    switch rawValue {
-    case 0: self = .network
-    case 1: self = .measurement
-    case 2: self = .messenger
-    default: self = .UNRECOGNIZED(rawValue)
-    }
-  }
-
-  var rawValue: Int {
-    switch self {
-    case .network: return 0
-    case .measurement: return 1
-    case .messenger: return 2
-    case .UNRECOGNIZED(let i): return i
-    }
-  }
-
-}
-
-#if swift(>=4.2)
-
-extension MessageType: CaseIterable {
-  // The compiler won't synthesize support with the UNRECOGNIZED case.
-  static let allCases: [MessageType] = [
-    .network,
-    .measurement,
-    .messenger,
-  ]
-}
-
-#endif  // swift(>=4.2)
-
 struct ForwardingEntry {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -122,6 +78,151 @@ struct MessengerMessage {
   init() {}
 }
 
+struct Init {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct InitAck {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Speak {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Spoke {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var delayInNs: Int64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Done {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var distanceInM: Float = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct DistanceProtocolWrapper {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var type: DistanceProtocolWrapper.OneOf_Type? = nil
+
+  var init_p: Init {
+    get {
+      if case .init_p(let v)? = type {return v}
+      return Init()
+    }
+    set {type = .init_p(newValue)}
+  }
+
+  var initAck: InitAck {
+    get {
+      if case .initAck(let v)? = type {return v}
+      return InitAck()
+    }
+    set {type = .initAck(newValue)}
+  }
+
+  var speak: Speak {
+    get {
+      if case .speak(let v)? = type {return v}
+      return Speak()
+    }
+    set {type = .speak(newValue)}
+  }
+
+  var spoke: Spoke {
+    get {
+      if case .spoke(let v)? = type {return v}
+      return Spoke()
+    }
+    set {type = .spoke(newValue)}
+  }
+
+  var done: Done {
+    get {
+      if case .done(let v)? = type {return v}
+      return Done()
+    }
+    set {type = .done(newValue)}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  enum OneOf_Type: Equatable {
+    case init_p(Init)
+    case initAck(InitAck)
+    case speak(Speak)
+    case spoke(Spoke)
+    case done(Done)
+
+  #if !swift(>=4.1)
+    static func ==(lhs: DistanceProtocolWrapper.OneOf_Type, rhs: DistanceProtocolWrapper.OneOf_Type) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch (lhs, rhs) {
+      case (.init_p, .init_p): return {
+        guard case .init_p(let l) = lhs, case .init_p(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.initAck, .initAck): return {
+        guard case .initAck(let l) = lhs, case .initAck(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.speak, .speak): return {
+        guard case .speak(let l) = lhs, case .speak(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.spoke, .spoke): return {
+        guard case .spoke(let l) = lhs, case .spoke(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.done, .done): return {
+        guard case .done(let l) = lhs, case .done(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      default: return false
+      }
+    }
+  #endif
+  }
+
+  init() {}
+}
+
 struct MessageWrapper {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -145,7 +246,6 @@ struct MessageWrapper {
     set {data = .measurementMessage(newValue)}
   }
 
-  /// more later?
   var messengerMessage: MessengerMessage {
     get {
       if case .messengerMessage(let v)? = data {return v}
@@ -154,13 +254,23 @@ struct MessageWrapper {
     set {data = .messengerMessage(newValue)}
   }
 
+  /// more later?
+  var distanceProtocolMessage: DistanceProtocolWrapper {
+    get {
+      if case .distanceProtocolMessage(let v)? = data {return v}
+      return DistanceProtocolWrapper()
+    }
+    set {data = .distanceProtocolMessage(newValue)}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   enum OneOf_Data: Equatable {
     case networkMessage(NetworkMessage)
     case measurementMessage(MeasurementMessage)
-    /// more later?
     case messengerMessage(MessengerMessage)
+    /// more later?
+    case distanceProtocolMessage(DistanceProtocolWrapper)
 
   #if !swift(>=4.1)
     static func ==(lhs: MessageWrapper.OneOf_Data, rhs: MessageWrapper.OneOf_Data) -> Bool {
@@ -180,6 +290,10 @@ struct MessageWrapper {
         guard case .messengerMessage(let l) = lhs, case .messengerMessage(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
+      case (.distanceProtocolMessage, .distanceProtocolMessage): return {
+        guard case .distanceProtocolMessage(let l) = lhs, case .distanceProtocolMessage(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -190,24 +304,22 @@ struct MessageWrapper {
 }
 
 #if swift(>=5.5) && canImport(_Concurrency)
-extension MessageType: @unchecked Sendable {}
 extension ForwardingEntry: @unchecked Sendable {}
 extension NetworkMessage: @unchecked Sendable {}
 extension MeasurementMessage: @unchecked Sendable {}
 extension MessengerMessage: @unchecked Sendable {}
+extension Init: @unchecked Sendable {}
+extension InitAck: @unchecked Sendable {}
+extension Speak: @unchecked Sendable {}
+extension Spoke: @unchecked Sendable {}
+extension Done: @unchecked Sendable {}
+extension DistanceProtocolWrapper: @unchecked Sendable {}
+extension DistanceProtocolWrapper.OneOf_Type: @unchecked Sendable {}
 extension MessageWrapper: @unchecked Sendable {}
 extension MessageWrapper.OneOf_Data: @unchecked Sendable {}
 #endif  // swift(>=5.5) && canImport(_Concurrency)
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
-
-extension MessageType: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    0: .same(proto: "MESSAGETYPE_NETWORK"),
-    1: .same(proto: "MESSAGETYPE_MEASUREMENT"),
-    2: .same(proto: "MESSAGETYPE_MESSENGER"),
-  ]
-}
 
 extension ForwardingEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "ForwardingEntry"
@@ -367,12 +479,258 @@ extension MessengerMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   }
 }
 
+extension Init: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "Init"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Init, rhs: Init) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension InitAck: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "InitAck"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: InitAck, rhs: InitAck) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Speak: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "Speak"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Speak, rhs: Speak) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Spoke: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "Spoke"
+  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "delayInNS"),
+  ]
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.delayInNs) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.delayInNs != 0 {
+      try visitor.visitSingularInt64Field(value: self.delayInNs, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Spoke, rhs: Spoke) -> Bool {
+    if lhs.delayInNs != rhs.delayInNs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Done: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "Done"
+  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "distanceInM"),
+  ]
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularFloatField(value: &self.distanceInM) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.distanceInM != 0 {
+      try visitor.visitSingularFloatField(value: self.distanceInM, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Done, rhs: Done) -> Bool {
+    if lhs.distanceInM != rhs.distanceInM {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension DistanceProtocolWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "DistanceProtocolWrapper"
+  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    2: .same(proto: "init"),
+    3: .same(proto: "initAck"),
+    4: .same(proto: "speak"),
+    5: .same(proto: "spoke"),
+    6: .same(proto: "done"),
+  ]
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 2: try {
+        var v: Init?
+        var hadOneofValue = false
+        if let current = self.type {
+          hadOneofValue = true
+          if case .init_p(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.type = .init_p(v)
+        }
+      }()
+      case 3: try {
+        var v: InitAck?
+        var hadOneofValue = false
+        if let current = self.type {
+          hadOneofValue = true
+          if case .initAck(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.type = .initAck(v)
+        }
+      }()
+      case 4: try {
+        var v: Speak?
+        var hadOneofValue = false
+        if let current = self.type {
+          hadOneofValue = true
+          if case .speak(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.type = .speak(v)
+        }
+      }()
+      case 5: try {
+        var v: Spoke?
+        var hadOneofValue = false
+        if let current = self.type {
+          hadOneofValue = true
+          if case .spoke(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.type = .spoke(v)
+        }
+      }()
+      case 6: try {
+        var v: Done?
+        var hadOneofValue = false
+        if let current = self.type {
+          hadOneofValue = true
+          if case .done(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.type = .done(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.type {
+    case .init_p?: try {
+      guard case .init_p(let v)? = self.type else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
+    case .initAck?: try {
+      guard case .initAck(let v)? = self.type else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .speak?: try {
+      guard case .speak(let v)? = self.type else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
+    case .spoke?: try {
+      guard case .spoke(let v)? = self.type else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }()
+    case .done?: try {
+      guard case .done(let v)? = self.type else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: DistanceProtocolWrapper, rhs: DistanceProtocolWrapper) -> Bool {
+    if lhs.type != rhs.type {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "MessageWrapper"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     2: .same(proto: "networkMessage"),
     3: .same(proto: "measurementMessage"),
     4: .same(proto: "messengerMessage"),
+    5: .same(proto: "distanceProtocolMessage"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -420,6 +778,19 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
           self.data = .messengerMessage(v)
         }
       }()
+      case 5: try {
+        var v: DistanceProtocolWrapper?
+        var hadOneofValue = false
+        if let current = self.data {
+          hadOneofValue = true
+          if case .distanceProtocolMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.data = .distanceProtocolMessage(v)
+        }
+      }()
       default: break
       }
     }
@@ -442,6 +813,10 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     case .messengerMessage?: try {
       guard case .messengerMessage(let v)? = self.data else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
+    case .distanceProtocolMessage?: try {
+      guard case .distanceProtocolMessage(let v)? = self.data else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     }()
     case nil: break
     }

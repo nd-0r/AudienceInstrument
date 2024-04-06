@@ -11,10 +11,10 @@ import MultipeerConnectivity
 class NodeMessageManager: ObservableObject {
     @Published internal var messages: [String] = []
     @Published internal var available: Bool = true
-    internal let peerId: PeerId
+    internal let peerId: ConnectionManager.PeerId
     internal var connectionManagerModel: ConnectionManagerModel?
 
-    init(peerId: PeerId, connectionManagerModel: ConnectionManagerModel? = nil) {
+    init(peerId: ConnectionManager.PeerId, connectionManagerModel: ConnectionManagerModel? = nil) {
         self.peerId = peerId
         self.connectionManagerModel = connectionManagerModel
     }

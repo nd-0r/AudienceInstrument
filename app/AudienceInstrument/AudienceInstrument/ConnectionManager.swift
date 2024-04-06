@@ -10,13 +10,10 @@ import MultipeerConnectivity
 import SWIMNet
 import Darwin.Mach
 
-typealias PeerId = Int64
-typealias Cost = UInt64
-
 @MainActor
 protocol ConnectionManagerModelProtocol: ObservableObject {
     var sessionPeers: [MCPeerID:MCSessionState] { get set }
-    var allNodes: [PeerId:NodeMessageManager] { get set }
+    var allNodes: [ConnectionManager.PeerId:NodeMessageManager] { get set }
     var estimatedLatencyByPeerInNs: [MCPeerID:Double] { get set }
 }
 
@@ -38,6 +35,9 @@ actor ConnectionManager:
     MCNearbyServiceBrowserDelegate,
     MCNearbyServiceAdvertiserDelegate
 {
+    typealias PeerId = Int64
+    typealias Cost = UInt64
+
     private var _connectionManagerModel: (any ConnectionManagerModelProtocol)? = nil
     var connectionManagerModel: (any ConnectionManagerModelProtocol)? {
         set {

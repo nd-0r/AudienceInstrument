@@ -21,6 +21,7 @@
 		6B05ADF22BBE01C900E99323 /* AudienceInstrumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADF12BBE01C900E99323 /* AudienceInstrumentTests.swift */; };
 		6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; };
 		6B5E02E02BABFBA300F72BA8 /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8915A92BBFA1270041825C /* DistanceManager.swift */; };
 		6B8E6F8E2BBA80AE002B84AC /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */; };
 /* End PBXBuildFile section */
 
@@ -65,6 +66,7 @@
 		6B05ADF12BBE01C900E99323 /* AudienceInstrumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceInstrumentTests.swift; sourceTree = "<group>"; };
 		6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SWIMNet.xcframework; path = ../SWIMNet/xcframeworks/SWIMNet.xcframework; sourceTree = "<group>"; };
 		6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudienceInstrument.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B8915A92BBFA1270041825C /* DistanceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +131,7 @@
 				6B05ADDA2BBDFE8D00E99323 /* Preview Content */,
 				6B05ADDD2BBDFE8D00E99323 /* Utils.swift */,
 				6B8E6F892BBA7FF2002B84AC /* Protobuf */,
+				6B8915A92BBFA1270041825C /* DistanceManager.swift */,
 			);
 			path = AudienceInstrument;
 			sourceTree = "<group>";
@@ -268,6 +271,7 @@
 				6B05ADE62BBDFE8D00E99323 /* ConnectionManager.swift in Sources */,
 				6B05ADE32BBDFE8D00E99323 /* ChatView.swift in Sources */,
 				6B05ADE12BBDFE8D00E99323 /* MessengerView.swift in Sources */,
+				6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */,
 				6B05ADE92BBDFE8D00E99323 /* AudienceInstrumentApp.swift in Sources */,
 				6B05ADE82BBDFE8D00E99323 /* Utils.swift in Sources */,
 				6B05ADD22BBDFDD100E99323 /* ConnectionManager.pb.swift in Sources */,

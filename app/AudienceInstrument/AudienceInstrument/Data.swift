@@ -13,7 +13,7 @@ let kDiscoveryApp = "AudienceInstrument"
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
     @Published var sessionPeers: [MCPeerID : MCSessionState]
-    @Published var allNodes: [PeerId : NodeMessageManager]
+    @Published var allNodes: [ConnectionManager.PeerId : NodeMessageManager]
     @Published var estimatedLatencyByPeerInNs: [MCPeerID : Double]
     private let connectionManager: ConnectionManager?
     @Published var ready: Bool = false
@@ -21,7 +21,7 @@ let kDiscoveryApp = "AudienceInstrument"
 
     init(
         sessionPeers: [MCPeerID : MCSessionState] = [:],
-        allNodes: [PeerId : NodeMessageManager] = [:],
+        allNodes: [ConnectionManager.PeerId : NodeMessageManager] = [:],
         estimatedLatencyByPeerInNs: [MCPeerID : Double] = [:],
         debugUI: Bool = false
     ) {
@@ -104,7 +104,7 @@ let kDiscoveryApp = "AudienceInstrument"
     }
 
     public func send(
-        toPeer peerId: PeerId,
+        toPeer peerId: ConnectionManager.PeerId,
         message: String,
         with reliability: MCSessionSendDataMode
     ) async throws {
