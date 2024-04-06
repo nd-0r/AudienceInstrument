@@ -36,7 +36,7 @@ message InitAck { }
 message Speak { }
 
 message Spoke {
-   int64 delayInNS = 1;
+   uint64 delayInNS = 1;
 }
 
 message Done {

@@ -9,11 +9,8 @@ import Foundation
 import MultipeerConnectivity
 
 protocol DistanceManagerSendDelegate {
-    func sendInit(to: [DistanceManager.PeerID]) -> Void
-    func sendInitAck(to: [DistanceManager.PeerID]) -> Void
-    func sendSpeak(to: [DistanceManager.PeerID]) -> Void
-    func sendSpoke(to: [DistanceManager.PeerID]) -> Void
-    func sendDone(to: [DistanceManager.PeerID], withCalcDist: [DistanceManager.DistInMeters]) -> Void
+    func send(toPeers: [DistanceManager.PeerID], withMessages: [DistanceProtocolWrapper])
+    func send(toPeers: [DistanceManager.PeerID], withMessage: DistanceProtocolWrapper)
 }
 
 protocol DistanceManagerUpdateDelegate {
@@ -57,7 +54,6 @@ struct DistanceManager {
 
     public static func removePeers(peers: [PeerID]) {
         Self.dispatchQueue.async {
-            uncalculatedPeers =
             for peer in peers {
                 Self.peersToRemove.insert(peer)
             }
@@ -75,7 +71,7 @@ struct DistanceManager {
             switch Self.dmState {
             case .done:
                 break
-            case .initiator(.`init`(let numAckedPeers)):
+            case .initiator(.`init`(.certain(let numAckedPeers))):
                 if numAckedPeers == Self.distByPeer.count {
                     return
                 }
@@ -83,34 +79,39 @@ struct DistanceManager {
                 return
             }
 
-            actualSendDelegate.sendInit(to: Array(Self.distByPeer.keys))
+            actualSendDelegate.send(
+                toPeers: Array(Self.distByPeer.keys),
+                withMessages: [DistanceProtocolWrapper.with {
+                    $0.type = .init_p(Init())
+                }]
+            )
+
             if retries > 0 {
                 Self.scheduleTimeout(
-                    expectedStateByDeadline: .initiator(.speak),
+                    expectedStateByDeadline: .initiator(.speak(.any)),
                     timeoutTargetState: .done,
-                    actionOnUnreachedTarget: { Self.initiate(retries: retries - 1) },
+                    actionOnUnreachedTarget: { Self.initiate(retries: retries - 1) }
                 )
             }
         }
     }
 
     public static func receiveMessage(message: DistanceProtocolWrapper, from: PeerID) throws {
-        Self.dispatchQueue.async {
-            switch message.type {
-            case .init_p:
-                throw DistanceManagerError.unimplemented
-            case .initAck:
-                throw DistanceManagerError.unimplemented
-            case .speak:
-                throw DistanceManagerError.unimplemented
-            case .spoke(let spoke):
-                throw DistanceManagerError.unimplemented
-            case .done(let done):
-                throw DistanceManagerError.unimplemented
-            case .none:
-                throw DistanceManagerError.unknownMessageType
-            }
+        switch message.type {
+        case .init_p:
+            Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from) }
+        case .initAck:
+            Self.dispatchQueue.async { Self.didReceiveInitAck(from: from) }
+        case .speak:
+            Self.dispatchQueue.async { Self.didReceiveSpeak(from: from) }
+        case .spoke(let spoke):
+            Self.dispatchQueue.async { Self.didReceiveSpoke(from: from, delayInNs: spoke.delayInNs) }
+        case .done(let done):
+            Self.dispatchQueue.async { Self.didReceiveDone(from: from, withCalcDist: done.distanceInM) }
+        case .none:
+            throw DistanceManagerError.unknownMessageType
         }
+
     }
 
 // MARK: Private interface
@@ -120,7 +121,7 @@ struct DistanceManager {
         expectedStateByDeadline: Self.State,
         timeoutTargetState: Self.State,
         deadlineFromNow: DispatchTimeInterval = .seconds(1),
-        actionOnUnreachedTarget: () -> Void = {},
+        actionOnUnreachedTarget: @escaping () -> Void = {}
     ) {
         Self.dispatchQueue.asyncAfter(deadline: DispatchTime.now().advanced(by: deadlineFromNow)) {
             switch DistanceManager.dmState {
@@ -133,17 +134,17 @@ struct DistanceManager {
         }
     }
 
-    private static func didReceiveInit(fromPeer: PeerID) throws {
+    private static func didReceiveInit(fromPeer: PeerID) {
         switch Self.dmState {
         case .done:
             break
-        case .speaker(.initAcked(let initPeer)):
+        case .speaker(.initAcked(.certain(let initPeer))):
             guard initPeer == fromPeer else {
                 return
             }
             // Initiator might not have received the acknowledgement
             break
-        case .speaker(.spoke(let initPeer)):
+        case .speaker(.spoke(.certain(let initPeer))):
             if initPeer == fromPeer {
                 fatalError("Received init from initiator (\(initPeer)) who already sent `speak` command: This should not be possible.")
             }
@@ -153,18 +154,32 @@ struct DistanceManager {
         }
 
         guard let dist = Self.distByPeer[fromPeer] else {
-            throw DistanceManagerError.unknownPeer("Received init from peer not added through `addPeer(peer:)`")
+            // throw DistanceManagerError.unknownPeer("Received init from peer not added through `addPeer(peer:)`")
+            // TODO log something here
+            return
         }
 
         switch dist {
         case .someCalculated(let calculatedDist):
             // Already calculated this distance: Resend it to the peer bc they must have missed the done message
-            Self.sendDelegate?.sendDone(to: fromPeer, withCalcDist: calculatedDist)
+            Self.sendDelegate?.send(
+                toPeers: [fromPeer],
+                withMessage: DistanceProtocolWrapper.with {
+                    $0.type = .done(Done.with {
+                        $0.distanceInM = calculatedDist
+                    }
+                )}
+            )
         case .noneCalculated:
-            Self.sendDelegate?.sendInitAck(to: [fromPeer])
-            Self.dmState = .speaker(fromPeer, .initAcked)
+            Self.sendDelegate?.send(
+                toPeers: [fromPeer],
+                withMessage: DistanceProtocolWrapper.with {
+                    $0.type = .initAck(InitAck())
+                }
+            )
+            Self.dmState = .speaker(.initAcked(.certain(fromPeer)))
             Self.scheduleTimeout(
-                expectedStateByDeadline: .speaker(.spoke(fromPeer)),
+                expectedStateByDeadline: .speaker(.spoke(.any)),
                 timeoutTargetState: .done
             )
         }
@@ -176,23 +191,28 @@ struct DistanceManager {
         }
 
         switch Self.dmState {
-        case .initiator(.`init`(let numAckedPeers)):
+        case .initiator(.`init`(.certain(let numAckedPeers))):
             guard Self.distByPeer[from] != nil else {
                 fatalError("Received InitAck from peer not added through `addPeer(peer:)` before `initiate()` was called. This should not be possible.")
             }
 
             if numAckedPeers == distByPeer.count {
-                actualSendDelegate.sendSpeak(to: Array(Self.distByPeer.keys))
-                Self.dmState = .initiator(.speak)
+                actualSendDelegate.send(
+                    toPeers: Array(Self.distByPeer.keys),
+                    withMessage: DistanceProtocolWrapper.with {
+                        $0.type = .speak(Speak())
+                    }
+                )
+                Self.dmState = .initiator(.speak(.certain(0)))
                 Self.scheduleTimeout(
                     expectedStateByDeadline: .done,
                     timeoutTargetState: .done,
                     actionOnUnreachedTarget: { Self.calculateDistances() }
                 )
             } else {
-                Self.dmState = .initiator(.`init`(numAckedPeers + 1))
+                Self.dmState = .initiator(.`init`(.certain(numAckedPeers + 1)))
             }
-        case .initiator(.speak(*)):
+        case .initiator(.speak(_)):
             fatalError("Received InitAck from peer \(from) while in speak phase: This should not be possible because speak commands are only sent after InitAcks from all peers have been received.")
         default:
             return
@@ -201,7 +221,7 @@ struct DistanceManager {
 
     private static func didReceiveSpeak(from: PeerID) {
         switch Self.dmState {
-        case .speaker(.initAcked(let initPeer)):
+        case .speaker(.initAcked(.certain(let initPeer))):
             if from != initPeer {
                 fatalError("Received speak from peer (\(from)) which is not the initiator (\(initPeer)): This should not be possible.")
             }
@@ -215,22 +235,25 @@ struct DistanceManager {
         // FIXME
         // Speak here using some audio class
 
-        Self.dmState = .speaker(.spoke)
+        Self.dmState = .speaker(.spoke(.certain(from)))
         scheduleTimeout(
             expectedStateByDeadline: .done,
             timeoutTargetState: .done
         )
     }
 
-    private static func didReceiveSpoke(from: PeerID) {
+    private static func didReceiveSpoke(from: PeerID, delayInNs: UInt64) {
         switch Self.dmState {
-        case .initiator(.speak(let numSpokenPeers)):
+        case .initiator(.speak(.certain(let numSpokenPeers))):
             guard let peerDist = Self.distByPeer[from] else {
                 fatalError("Received `Spoke` from peer not added through `addPeer(peer:)` before `initiate()` was called. This should not be possible.")
             }
 
-            if peerDist == DistanceManager.PeerDist.someCalculated(*) {
+            switch peerDist {
+            case .someCalculated(_):
                 fatalError("Received `Spoke` from peer whose distance is already calculated: This should not be possible.")
+            default:
+                break
             }
 
             // FIXME tell distance calculator that received a `Spoke` message
@@ -246,7 +269,7 @@ struct DistanceManager {
 
     private static func didReceiveDone(from: PeerID, withCalcDist: DistInMeters) {
         switch Self.dmState {
-        case .speaker(.spoke(let initPeer)):
+        case .speaker(.spoke(.certain(let initPeer))):
             if initPeer != from {
                 fatalError("Received done from peer (\(from)) which is not the initiator (\(initPeer)): This should not be possible.")
             }
@@ -261,19 +284,27 @@ struct DistanceManager {
 
     private static func calculateDistances() {
         switch Self.dmState {
-        case .initiator(.speak(*)):
+        case .initiator(.speak(_)):
             break
         default:
             return
         }
 
         // calculate distance to each peer and send results to each peer
-        let (peerIDs, calcDists): ([PeerID], [DistInMeters]) = [] // FIXME
+        let (peerIDs, calcDists): ([PeerID], [DistInMeters]) = ([], []) // FIXME
         for (peerID, calcDist) in zip(peerIDs, calcDists) {
             Self.distByPeer[peerID] = .someCalculated(calcDist)
         }
 
-        Self.sendDelegate?.sendDone(to: peerIDs, calculatedDistanceInM: calcDists)
+        let messages = calcDists.map({ calcDist in
+            DistanceProtocolWrapper.with {
+                $0.type = .done(Done.with {
+                    $0.distanceInM = calcDist
+                })
+            }
+        })
+
+        Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages)
 
         Self.dmState = .done
 
@@ -306,17 +337,31 @@ struct DistanceManager {
     private static var peersToRemove: Set<PeerID> = []
     private static var distByPeer: [PeerID:PeerDist] = [:]
 
-    private enum InitiatorState {
-        case `init`(UInt)
-        case speak(UInt)
+    private enum Anyable<T>: Equatable where T: Equatable {
+        case certain(T)
+        case any
+
+        static func ==(lhs: Anyable<T>, rhs: Anyable<T>) -> Bool {
+            switch (lhs, rhs) {
+            case (.certain(let lval), .certain(let rval)):
+                return lval == rval
+            default:
+                return true
+            }
+        }
     }
 
-    private enum SpeakerState {
-        case initAcked(PeerID)
-        case spoke(PeerID)
+    private enum InitiatorState: Equatable {
+        case `init`(Anyable<UInt>)
+        case speak(Anyable<UInt>)
     }
 
-    private enum State {
+    private enum SpeakerState: Equatable {
+        case initAcked(Anyable<PeerID>)
+        case spoke(Anyable<PeerID>)
+    }
+
+    private enum State: Equatable {
         case initiator(InitiatorState)
         case speaker(SpeakerState)
         case done
