@@ -23,4 +23,10 @@ MockingbirdCache
 archives
 xcframeworks
 
+# Generated
+*.generated.swift
+
+# Caches
+**/*.xcodeproj/MockingbirdCache/
+
 # End of https://www.toptal.com/developers/gitignore/api/xcode
