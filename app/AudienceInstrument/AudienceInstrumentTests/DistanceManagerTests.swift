@@ -16,27 +16,130 @@ final class DistanceManagerInitiatorTests: XCTestCase {
     let mockSendDelegate = mock(DistanceManagerSendDelegate.self)
     let mockUpdateDelegate = mock(DistanceManagerUpdateDelegate.self)
 
-    let selfID = MCPeerID(displayName: "test-initiator")
-    let peerIDs: [MCPeerID] = []
+    let kTimeoutInNS = 40 * NSEC_PER_MSEC // TODO remove dependency on DistanceManager source
 
-    override func setUpWithError() throws {
-        DistanceManager.registerSendDelegate(delegate: mockSendDelegate)
-        DistanceManager.registerUpdateDelegate(delegate: mockUpdateDelegate)
-        DistanceManager.setup(distanceCalculator: mockDistanceCalculator)
+    typealias DM = DistanceManager
+
+    override func setUp() {
+        DM.registerSendDelegate(delegate: mockSendDelegate)
+        DM.registerUpdateDelegate(delegate: mockUpdateDelegate)
+        DM.setup(distanceCalculator: mockDistanceCalculator)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() {
+        reset(mockDistanceCalculator)
+        reset(mockSendDelegate)
+        reset(mockUpdateDelegate)
     }
+
+    func verifyTotalMessage(expected: UInt) {
+        verify(mockSendDelegate.send(
+            toPeers: any([MCPeerID].self),
+            withMessage: any(DistanceProtocolWrapper.self))
+        ).wasCalled(Int(expected))
+    }
+
+    func verifyTotalMessages(expected: UInt) {
+        verify(mockSendDelegate.send(
+            toPeers: any([MCPeerID].self),
+            withMessages: any([DistanceProtocolWrapper].self))
+        ).wasCalled(Int(expected))
+    }
+
+    func verifyPeerRegistrations(peers: [MCPeerID]) {
+        verify(mockDistanceCalculator.registerPeer(peer: any(MCPeerID.self))).wasCalled(peers.count)
+        verify(mockDistanceCalculator.deregisterPeer(peer: any(MCPeerID.self))).wasCalled(peers.count)
+
+        for peer in peers {
+            verify(mockDistanceCalculator.registerPeer(peer: peer)).wasCalled(1)
+            verify(mockDistanceCalculator.deregisterPeer(peer: peer)).wasCalled(1)
+        }
+    }
+
 
 // MARK: Initiator tests
 
-    func testInitiatorOnePeer() {}
+    func testInitiatorOnePeer() async throws {
+        let peer0 = MCPeerID(displayName: "test-peer0")
+        DM.addPeers(peers: [peer0])
+
+        DM.initiate(retries: 0)
+
+        try DM.receiveMessage(
+            message: DistanceProtocolWrapper.with {
+                $0.type = .initAck(InitAck())
+            },
+            from: peer0,
+            receivedAt: 0
+        )
+
+        DM.reset()
+
+        verifyTotalMessage(expected: 2)
+
+        verify(mockSendDelegate.send(
+            toPeers: [peer0],
+            withMessage: DistanceProtocolWrapper.with {
+                $0.type = .init_p(Init())
+            }
+        )).wasCalled(1)
+        verify(mockSendDelegate.send(
+            toPeers: [peer0],
+            withMessage: DistanceProtocolWrapper.with {
+                $0.type = .speak(Speak())
+            }
+        )).wasCalled(1)
+
+        verify(mockDistanceCalculator.listen()).wasCalled(1)
+        verifyPeerRegistrations(peers: [peer0])
+    }
     
-    func testInitiatorMultiPeers() {}
+    func testInitiatorMultiPeers() async throws {
+        let peer0 = MCPeerID(displayName: "test-peer0")
+        let peer1 = MCPeerID(displayName: "test-peer1")
+        let peer2 = MCPeerID(displayName: "test-peer2")
+        DM.addPeers(peers: [peer0, peer1, peer2])
 
-    func testInitiatorMultiPeerAllInitAckTimeout() {}
+        DM.initiate(retries: 0)
 
-    func testInitiatorMultiPeerSingleInitAckTimeout() {}
+        for p in [peer0, peer1, peer2] {
+            try DM.receiveMessage(
+                message: DistanceProtocolWrapper.with {
+                    $0.type = .initAck(InitAck())
+                },
+                from: p,
+                receivedAt: 0
+            )
+        }
+
+        DM.reset()
+
+        verifyTotalMessage(expected: 2)
+
+        verify(mockSendDelegate.send(
+            toPeers: any(containing: peer0, peer1, peer2),
+            withMessage: DistanceProtocolWrapper.with {
+                $0.type = .init_p(Init())
+            }
+        )).wasCalled(1)
+        verify(mockSendDelegate.send(
+            toPeers: any(containing: peer0, peer1, peer2),
+            withMessage: DistanceProtocolWrapper.with {
+                $0.type = .speak(Speak())
+            }
+        )).wasCalled(1)
+
+        verify(mockDistanceCalculator.listen()).wasCalled(1)
+        verifyPeerRegistrations(peers: [peer0, peer1, peer2])
+    }
+
+    func testInitiatorMultiPeerAllInitAckMultiTryTimeout() {}
+
+    func testInitiatorMultiPeerSingleInitAckMultiTryTimeout() {}
+
+    func testInitiatorMultiPeerAllInitAckMultiTry() {}
+
+    func testInitiatorMultiPeerSinglInitAckMultiTry() {}
 
     func testInitiatorMultiPeerAllSpokeTimeout() {}
 
@@ -45,11 +148,9 @@ final class DistanceManagerInitiatorTests: XCTestCase {
     func testInitiatorMultiPhaseAddPeer() {}
 
     func testInitiatorMultiPhaseRemovePeer() {}
-
-// MARK: Speaker tests
-
 }
 
+// MARK: Speaker tests
 /// Must execute in serial because DistanceManager is not thread-safe
 final class DistanceManagerSpeakerTests: XCTestCase {
     let mockDistanceCalculator = mock(DistanceCalculatorProtocol.self)
@@ -75,7 +176,7 @@ final class DistanceManagerSpeakerTests: XCTestCase {
         reset(mockUpdateDelegate)
     }
 
-    func verifyTotalMesages(expected: UInt) {
+    func verifyTotalMessage(expected: UInt) {
         verify(mockSendDelegate.send(
             toPeers: any([MCPeerID].self),
             withMessage: any(DistanceProtocolWrapper.self))
@@ -101,12 +202,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 1)
+        verifyTotalMessage(expected: 1)
 
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
@@ -125,19 +227,21 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 2)
+        verifyTotalMessage(expected: 2)
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
             withMessage: DistanceProtocolWrapper.with {
@@ -155,12 +259,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: unknownInitiator
+            from: unknownInitiator,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 0)
+        verifyTotalMessage(expected: 0)
 
         verifyPeerRegistrations(extraPeers: [])
     }
@@ -173,12 +278,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 1)
+        verifyTotalMessage(expected: 1)
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
             withMessage: DistanceProtocolWrapper.with {
@@ -197,7 +303,8 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try await Task.sleep(nanoseconds: kTimeoutInNS)
@@ -206,12 +313,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .speak(Speak())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 1)
+        verifyTotalMessage(expected: 1)
 
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
@@ -231,19 +339,21 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .speak(Speak())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 2)
+        verifyTotalMessage(expected: 2)
 
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
@@ -271,14 +381,16 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .speak(Speak())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try await Task.sleep(nanoseconds: kTimeoutInNS)
@@ -289,12 +401,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
                     $0.distanceInM = 1.73
                 })
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 2)
+        verifyTotalMessage(expected: 2)
 
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],
@@ -324,14 +437,16 @@ final class DistanceManagerSpeakerTests: XCTestCase {
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .speak(Speak())
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         try DM.receiveMessage(
@@ -340,12 +455,13 @@ final class DistanceManagerSpeakerTests: XCTestCase {
                     $0.distanceInM = 1.73
                 })
             },
-            from: initiatorID
+            from: initiatorID,
+            receivedAt: 0
         )
 
         DM.reset()
 
-        verifyTotalMesages(expected: 2)
+        verifyTotalMessage(expected: 2)
 
         verify(mockSendDelegate.send(
             toPeers: [initiatorID],

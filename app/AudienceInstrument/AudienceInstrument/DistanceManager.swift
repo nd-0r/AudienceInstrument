@@ -13,7 +13,7 @@ protocol DistanceCalculatorProtocol{
     func deregisterPeer(peer: DistanceManager.PeerID) -> Void
     func speak() throws -> UInt64
     func listen() throws -> Void
-    func heardPeerSpeak(reportedSpeakingDelay: UInt64) -> Void
+    func heardPeerSpeak(peer: DistanceManager.PeerID, processingDelay: UInt64, reportedSpeakingDelay: UInt64) -> Void
     func calculateDistances() -> ([DistanceManager.PeerID], [DistanceManager.DistInMeters])
     func reset() -> Void
 }
@@ -93,6 +93,7 @@ struct DistanceManager {
 
             switch Self.dmState {
             case .done:
+                Self.dmState = .initiator(.`init`(.certain(0)))
                 break
             case .initiator(.`init`(.certain(let numAckedPeers))):
                 if numAckedPeers == Self.distByPeer.count {
@@ -104,9 +105,9 @@ struct DistanceManager {
 
             actualSendDelegate.send(
                 toPeers: Array(Self.distByPeer.keys),
-                withMessages: [DistanceProtocolWrapper.with {
+                withMessage: DistanceProtocolWrapper.with {
                     $0.type = .init_p(Init())
-                }]
+                }
             )
 
             if retries > 0 {
@@ -119,7 +120,11 @@ struct DistanceManager {
         }
     }
 
-    public static func receiveMessage(message: DistanceProtocolWrapper, from: PeerID) throws {
+    public static func receiveMessage(
+        message: DistanceProtocolWrapper,
+        from: PeerID,
+        receivedAt: UInt64
+    ) throws {
         switch message.type {
         case .init_p:
             Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from) }
@@ -128,7 +133,7 @@ struct DistanceManager {
         case .speak:
             Self.dispatchQueue.async { Self.didReceiveSpeak(from: from) }
         case .spoke(let spoke):
-            Self.dispatchQueue.async { Self.didReceiveSpoke(from: from, delayInNs: spoke.delayInNs) }
+            Self.dispatchQueue.async { Self.didReceiveSpoke(from: from, receivedAt: receivedAt, delayInNs: spoke.delayInNs) }
         case .done(let done):
             Self.dispatchQueue.async { Self.didReceiveDone(from: from, withCalcDist: done.distanceInM) }
         case .none:
@@ -242,7 +247,7 @@ struct DistanceManager {
                 fatalError("Received InitAck from peer not added through `addPeer(peer:)` before `initiate()` was called. This should not be possible.")
             }
 
-            if numAckedPeers == distByPeer.count {
+            if numAckedPeers + 1 == distByPeer.count {
                 actualSendDelegate.send(
                     toPeers: Array(Self.distByPeer.keys),
                     withMessage: DistanceProtocolWrapper.with {
@@ -304,7 +309,7 @@ struct DistanceManager {
         }
     }
 
-    private static func didReceiveSpoke(from: PeerID, delayInNs: UInt64) {
+    private static func didReceiveSpoke(from: PeerID, receivedAt: UInt64, delayInNs: UInt64) {
         switch Self.dmState {
         case .initiator(.speak(.certain(let numSpokenPeers))):
             guard let peerDist = Self.distByPeer[from] else {
@@ -318,7 +323,12 @@ struct DistanceManager {
                 break
             }
 
-            Self.distanceCalculator!.heardPeerSpeak(reportedSpeakingDelay: delayInNs)
+            let processingDelay = Self.getCurrentTimeInNs() - receivedAt
+            Self.distanceCalculator!.heardPeerSpeak(
+                peer: from,
+                processingDelay: processingDelay,
+                reportedSpeakingDelay: delayInNs
+            )
             guard numSpokenPeers == Self.distByPeer.count else {
                 return
             }
@@ -403,6 +413,15 @@ struct DistanceManager {
 
         peersToAdd.removeAll()
         peersToRemove.removeAll()
+    }
+
+    @inline(__always)
+    static private func getCurrentTimeInNs() -> UInt64 {
+        var timeBaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timeBaseInfo)
+        let timeUnits = mach_absolute_time()
+
+        return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
     }
 
     private static var sendDelegate: (any DistanceManagerSendDelegate)?
