@@ -85,14 +85,16 @@ struct DistanceManager {
 
     public static func initiate(
         retries: UInt = 2,
-        withTimeout: DispatchTimeInterval = .milliseconds(10)
+        withInitTimeout: DispatchTimeInterval = .milliseconds(10),
+        withSpokeTimeout: DispatchTimeInterval = .milliseconds(10)
     ) {
         Self.dispatchQueue.async {
             #if DEBUG
-            print("TRY: \(retries) WITH TIMEOUT: \(withTimeout)") // TODO: remove
+            print("TRY: \(retries) WITH TIMEOUT: \(withInitTimeout)") // TODO: remove
             #endif
 
             updateDistByPeer()
+            Self.spokeTimeout = withSpokeTimeout
 
             guard let actualSendDelegate = DistanceManager.sendDelegate else {
                 fatalError("Cannot possibly initiate distance measurement protocol without a send delegate.")
@@ -110,8 +112,16 @@ struct DistanceManager {
                 return
             }
 
+            // Add already calculated peers to ready set because don't want to consider InitAcks from them
+            for (k, v) in Self.distByPeer {
+                if v != .noneCalculated {
+                    Self.initAckedPeers.insert(k)
+                }
+            }
+
+            Self.peersInCurrentRound = Array(Self.distByPeer.filter({ (_, v) in v == .noneCalculated }).keys)
             actualSendDelegate.send(
-                toPeers: Array(Self.distByPeer.keys),
+                toPeers: Self.peersInCurrentRound,
                 withMessage: DistanceProtocolWrapper.with {
                     $0.type = .init_p(Init())
                 }
@@ -121,18 +131,18 @@ struct DistanceManager {
                 Self.scheduleTimeout(
                     expectedStateByDeadline: .initiator(.speak(.any)),
                     timeoutTargetState: nil,
-                    deadlineFromNow: withTimeout,
+                    deadlineFromNow: withInitTimeout,
                     actionOnUnreachedTarget: {
-                        Self.initiate(retries: retries - 1, withTimeout: withTimeout)
+                        Self.initiate(retries: retries - 1, withInitTimeout: withInitTimeout)
                     }
                 )
             } else {
                 Self.scheduleTimeout(
                     expectedStateByDeadline: .initiator(.speak(.any)),
                     timeoutTargetState: .done,
-                    deadlineFromNow: withTimeout,
+                    deadlineFromNow: withInitTimeout,
                     actionOnUnreachedTarget: {
-                        Self.readyPeers.removeAll()
+                        Self.initAckedPeers.removeAll()
                     }
                 )
             }
@@ -272,7 +282,7 @@ struct DistanceManager {
             #if DEBUG
             print("RECEIVED INIT ACK FROM: \(from)") // TODO: remove
             #endif
-            guard !Self.readyPeers.contains(from) else {
+            guard !Self.initAckedPeers.contains(from) else {
                 // Already received ack from this peer
                 return
             }
@@ -280,21 +290,22 @@ struct DistanceManager {
             print("ACCEPTED INIT ACK FROM: \(from)") // TODO: remove
             #endif
 
-            Self.readyPeers.insert(from)
-            if numAckedPeers + 1 == distByPeer.count {
+            Self.initAckedPeers.insert(from)
+            if numAckedPeers + 1 == Self.peersInCurrentRound.count {
                 Self.cancelTimeouts()
 
+                try? Self.distanceCalculator!.listen() // TODO catch errors
                 actualSendDelegate.send(
-                    toPeers: Array(Self.distByPeer.keys),
+                    toPeers: Self.peersInCurrentRound,
                     withMessage: DistanceProtocolWrapper.with {
                         $0.type = .speak(Speak())
                     }
                 )
-                try? Self.distanceCalculator!.listen() // TODO catch errors
                 Self.dmState = .initiator(.speak(.certain(0)))
                 Self.scheduleTimeout(
                     expectedStateByDeadline: .done,
                     timeoutTargetState: .done,
+                    deadlineFromNow: Self.spokeTimeout,
                     actionOnUnreachedTarget: { Self.calculateDistances() }
                 )
             } else {
@@ -346,11 +357,18 @@ struct DistanceManager {
     }
 
     private static func didReceiveSpoke(from: PeerID, receivedAt: UInt64, delayInNs: UInt64) {
+        #if DEBUG
+        print("RECEIVED SPOKE FROM: \(from) in state \(Self.dmState)") // TODO: remove
+        #endif
+
         switch Self.dmState {
         case .initiator(.speak(.certain(let numSpokenPeers))):
             guard let peerDist = Self.distByPeer[from] else {
                 fatalError("Received `Spoke` from peer not added through `addPeer(peer:)` before `initiate()` was called. This should not be possible.")
             }
+            #if DEBUG
+            print("RECEIVED SPOKE FROM: \(from)") // TODO: remove
+            #endif
 
             switch peerDist {
             case .someCalculated(_):
@@ -359,6 +377,10 @@ struct DistanceManager {
                 break
             }
 
+            #if DEBUG
+            print("ACCEPTED SPOKE FROM: \(from)") // TODO: remove
+            #endif
+
             let processingDelay = Self.getCurrentTimeInNs() - receivedAt
             Self.distanceCalculator!.heardPeerSpeak(
                 peer: from,
@@ -366,8 +388,10 @@ struct DistanceManager {
                 reportedSpeakingDelay: delayInNs
             )
 
-            if numSpokenPeers == Self.distByPeer.count {
+            if numSpokenPeers + 1 == Self.peersInCurrentRound.count {
                 Self.calculateDistances()
+            } else {
+                Self.dmState = .initiator(.speak(.certain(numSpokenPeers + 1)))
             }
         default:
             return
@@ -401,18 +425,12 @@ struct DistanceManager {
     private static func resetToDone() {
         Self.cancelTimeouts()
         Self.distanceCalculator?.reset()
-        Self.readyPeers.removeAll()
+        Self.initAckedPeers.removeAll()
+        Self.peersInCurrentRound = []
         Self.dmState = .done
     }
 
     private static func calculateDistances() {
-        switch Self.dmState {
-        case .initiator(.speak(_)):
-            break
-        default:
-            return
-        }
-
         let (peerIDs, calcDists): ([PeerID], [DistInMeters]) = Self.distanceCalculator!.calculateDistances()
         for (peerID, calcDist) in zip(peerIDs, calcDists) {
             Self.distByPeer[peerID] = .someCalculated(calcDist)
@@ -426,9 +444,11 @@ struct DistanceManager {
             }
         })
 
-        Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages)
+        if !messages.isEmpty {
+            Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages)
+            Self.updateDelegate?.didUpdate(distancesByPeer: Self.distByPeer)
+        }
         Self.resetToDone()
-        Self.updateDelegate?.didUpdate(distancesByPeer: Self.distByPeer)
     }
 
     private static func updateDistByPeer() {
@@ -500,7 +520,9 @@ struct DistanceManager {
     private static var peersToAdd: Set<PeerToAdd> = []
     private static var peersToRemove: Set<PeerID> = []
     private static var distByPeer: [PeerID:PeerDist] = [:]
-    private static var readyPeers: Set<PeerID> = []
+    private static var initAckedPeers: Set<PeerID> = []
+    private static var peersInCurrentRound: Array<PeerID> = []
+    private static var spokeTimeout: DispatchTimeInterval = .milliseconds(10)
 
     private enum Anyable<T>: Equatable, CustomStringConvertible
     where T: Equatable & CustomStringConvertible {
