@@ -19,6 +19,11 @@
 		6B05ADE82BBDFE8D00E99323 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADDD2BBDFE8D00E99323 /* Utils.swift */; };
 		6B05ADE92BBDFE8D00E99323 /* AudienceInstrumentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADDE2BBDFE8D00E99323 /* AudienceInstrumentApp.swift */; };
 		6B05ADEA2BBDFE8D00E99323 /* MessageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADDF2BBDFE8D00E99323 /* MessageManager.swift */; };
+		6B1601412BC9B2E40008E11B /* DistanceCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1601402BC9B2E40008E11B /* DistanceCalculator.swift */; };
+		6B383EC92BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383EC82BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift */; };
+		6B383ECB2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECA2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift */; };
+		6B383ECD2BCB951B006E8F42 /* RingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECC2BCB951B006E8F42 /* RingBuffer.swift */; };
+		6B383ECF2BCB9CE5006E8F42 /* RingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */; };
 		6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; };
 		6B5E02E02BABFBA300F72BA8 /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6B6C71EA2BC225240094E152 /* DistanceManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */; };
@@ -65,11 +70,16 @@
 		6B05ADDE2BBDFE8D00E99323 /* AudienceInstrumentApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AudienceInstrumentApp.swift; sourceTree = "<group>"; };
 		6B05ADDF2BBDFE8D00E99323 /* MessageManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MessageManager.swift; sourceTree = "<group>"; };
 		6B05ADEF2BBE01C900E99323 /* AudienceInstrumentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AudienceInstrumentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B1601402BC9B2E40008E11B /* DistanceCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceCalculator.swift; sourceTree = "<group>"; };
+		6B383EC82BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNode.swift; sourceTree = "<group>"; };
+		6B383ECA2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNode.swift; sourceTree = "<group>"; };
+		6B383ECC2BCB951B006E8F42 /* RingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingBuffer.swift; sourceTree = "<group>"; };
+		6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingBufferTests.swift; sourceTree = "<group>"; };
 		6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SWIMNet.xcframework; path = ../SWIMNet/xcframeworks/SWIMNet.xcframework; sourceTree = "<group>"; };
 		6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceManagerTests.swift; sourceTree = "<group>"; };
 		6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudienceInstrument.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B8915A92BBFA1270041825C /* DistanceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceManager.swift; sourceTree = "<group>"; };
-		6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = file; path = AudienceInstrument.xctestplan; sourceTree = SOURCE_ROOT; };
+		6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = AudienceInstrument.xctestplan; sourceTree = SOURCE_ROOT; };
 		AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; name = "AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; path = "MockingbirdMocks/AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -99,6 +109,7 @@
 			children = (
 				6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */,
 				6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */,
+				6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */,
 			);
 			path = AudienceInstrumentTests;
 			sourceTree = "<group>";
@@ -138,7 +149,11 @@
 				6B05ADDA2BBDFE8D00E99323 /* Preview Content */,
 				6B05ADDD2BBDFE8D00E99323 /* Utils.swift */,
 				6B8E6F892BBA7FF2002B84AC /* Protobuf */,
+				6B383ECA2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift */,
 				6B8915A92BBFA1270041825C /* DistanceManager.swift */,
+				6B1601402BC9B2E40008E11B /* DistanceCalculator.swift */,
+				6B383EC82BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift */,
+				6B383ECC2BCB951B006E8F42 /* RingBuffer.swift */,
 			);
 			path = AudienceInstrument;
 			sourceTree = "<group>";
@@ -300,6 +315,7 @@
 			files = (
 				6B6C71EA2BC225240094E152 /* DistanceManagerTests.swift in Sources */,
 				4AE59AEFB65EFE46B6F71AAA /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */,
+				6B383ECF2BCB9CE5006E8F42 /* RingBufferTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,16 +323,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6B383EC92BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift in Sources */,
 				6B05ADEA2BBDFE8D00E99323 /* MessageManager.swift in Sources */,
 				6B05ADE62BBDFE8D00E99323 /* ConnectionManager.swift in Sources */,
 				6B05ADE32BBDFE8D00E99323 /* ChatView.swift in Sources */,
 				6B05ADE12BBDFE8D00E99323 /* MessengerView.swift in Sources */,
+				6B383ECD2BCB951B006E8F42 /* RingBuffer.swift in Sources */,
 				6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */,
+				6B1601412BC9B2E40008E11B /* DistanceCalculator.swift in Sources */,
 				6B05ADE92BBDFE8D00E99323 /* AudienceInstrumentApp.swift in Sources */,
 				6B05ADE82BBDFE8D00E99323 /* Utils.swift in Sources */,
 				6B05ADD22BBDFDD100E99323 /* ConnectionManager.pb.swift in Sources */,
 				6B05ADE72BBDFE8D00E99323 /* PeerConnectionView.swift in Sources */,
 				6B05ADE02BBDFE8D00E99323 /* Data.swift in Sources */,
+				6B383ECB2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
