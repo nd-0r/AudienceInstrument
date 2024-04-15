@@ -30,6 +30,8 @@
 		6B6C71ED2BC252680094E152 /* Mockingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 6B6C71EC2BC252680094E152 /* Mockingbird */; };
 		6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8915A92BBFA1270041825C /* DistanceManager.swift */; };
 		6B8E6F8E2BBA80AE002B84AC /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */; };
+		6BAEE58D2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */; };
+		6BAEE58F2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,6 +82,8 @@
 		6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudienceInstrument.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B8915A92BBFA1270041825C /* DistanceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceManager.swift; sourceTree = "<group>"; };
 		6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = AudienceInstrument.xctestplan; sourceTree = SOURCE_ROOT; };
+		6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNodeTests.swift; sourceTree = "<group>"; };
+		6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNodeTests.swift; sourceTree = "<group>"; };
 		AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; name = "AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; path = "MockingbirdMocks/AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -110,6 +114,8 @@
 				6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */,
 				6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */,
 				6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */,
+				6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */,
+				6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */,
 			);
 			path = AudienceInstrumentTests;
 			sourceTree = "<group>";
@@ -313,6 +319,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6BAEE58D2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift in Sources */,
+				6BAEE58F2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift in Sources */,
 				6B6C71EA2BC225240094E152 /* DistanceManagerTests.swift in Sources */,
 				4AE59AEFB65EFE46B6F71AAA /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */,
 				6B383ECF2BCB9CE5006E8F42 /* RingBufferTests.swift in Sources */,

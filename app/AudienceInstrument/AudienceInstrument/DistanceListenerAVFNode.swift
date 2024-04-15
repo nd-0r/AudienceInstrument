@@ -61,7 +61,7 @@ class DistanceListener {
         freqBinStartSamples.deallocate()
     }
 
-    func stopAndCalcRecvTimeInNSByFreq() -> [Freq:UInt64]? {
+    func stopAndCalcRecvTimeInNSByFreq() -> [Freq:UInt64?]? {
         detachAndDisconnectSink()
 
         guard let actualAnchorTime = self.anchorAudioTime else {
@@ -72,24 +72,35 @@ class DistanceListener {
         let binWidth = freqRange / Freq(Self.halfFFTSize)
         let sortedFreqs = self.freqs.sorted()
         var freqIdx = 0
-        var out = [Freq:UInt64]()
+        var out = [Freq:UInt64?]()
 
         binLoop: for binIdx in 0..<Self.halfFFTSize {
             let binLB = Freq(binIdx) * binWidth
             let binUB = binLB + binWidth
             var currFreq = sortedFreqs[freqIdx]
             if currFreq >= binLB && currFreq < binUB {
-                let hostTimeForBin = AVAudioTime(
-                    sampleTime: AVAudioFramePosition(self.freqBinStartSamples[binIdx]),
-                    atRate: self.format.sampleRate
-                ).extrapolateTime(fromAnchor: actualAnchorTime)!.hostTime
+                var binHostTime: UInt64? = nil
+
+                if self.freqBinStartSamples[binIdx] != UInt64.max {
+                    if let binAudioTime = AVAudioTime(
+                        sampleTime: AVAudioFramePosition(self.freqBinStartSamples[binIdx]),
+                        atRate: self.format.sampleRate
+                    ).extrapolateTime(fromAnchor: actualAnchorTime) {
+                        if binAudioTime.hostTime < self.expectedToneLenLBSamples ||
+                           binAudioTime.hostTime > self.expectedToneLenUBSamples {
+                            binHostTime = nil
+                        } else {
+                            binHostTime = binAudioTime.hostTime
+                        }
+                    }
+                }
 
                 repeat {
                     guard currFreq < binUB else {
                         // move to the next bin
                         continue binLoop
                     }
-                    out[currFreq] = hostTimeForBin
+                    out[currFreq] = binHostTime
                     freqIdx += 1
                     currFreq = sortedFreqs[freqIdx]
                 } while freqIdx < self.freqs.count
