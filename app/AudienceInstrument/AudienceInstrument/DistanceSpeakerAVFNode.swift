@@ -17,6 +17,7 @@ class DistanceSpeaker {
     ) {
         self.format = format
         self.freq = frequencyToSpeak
+        self.timeToSpeak = speakTime
         self.audioEngine = audioEngine
         self.wavetableStep = computeWavetableStep()
         self.sourceNode = makeSourceNode()
@@ -52,44 +53,42 @@ class DistanceSpeaker {
     }
 
     private func makeSourceNode() -> AVAudioSourceNode {
-        AVAudioSourceNode { [weak self]
+        AVAudioSourceNode { [self]
         _, _, frameCount, outputData -> OSStatus in
-            guard let actualSelf = self else {
-                return noErr
-            }
-
             let ablPointer = UnsafeMutableAudioBufferListPointer(outputData)
 
-            for frameIdx in 0..<Int(frameCount) {
-                let index0 = Int(actualSelf.currWavetableIdx)
+            let numFrames = min(Int(frameCount), self.samplesToSpeak)
+            for frameIdx in 0..<numFrames {
+                let index0 = Int(self.currWavetableIdx)
                 let index1 = index0 + 1
 
-                let frac = actualSelf.currWavetableIdx - Float(index0)
+                let frac = self.currWavetableIdx - Float(index0)
 
-                let value0 = actualSelf.wavetable[index0]
-                let value1 = actualSelf.wavetable[index1]
+                let value0 = self.wavetable[index0]
+                let value1 = self.wavetable[index1]
 
                 // Linear interpolation
                 let currSample = value0 + frac * (value1 - value0)
 
-                var nextWavetableIdx = actualSelf.currWavetableIdx + actualSelf.wavetableStep
+                var nextWavetableIdx = self.currWavetableIdx + self.wavetableStep
                 // `tableSize - 2` because have to accommodate for linear
                 // interpolation. If the table size is 4096, in the worst
                 // case, `nextWavetableIdx` is just less than 4095, e.g.
                 // 4094.999999... Then, `index1` would be
                 // floor(4094.999999...) + 1 = 4095, which is the last
                 // index in the table.
-                if (nextWavetableIdx > Float(actualSelf.tableSize - 1)) {
+                if (nextWavetableIdx > Float(self.tableSize - 1)) {
                     // Wrap around the wavetable
-                    nextWavetableIdx -= Float(actualSelf.tableSize - 1)
+                    nextWavetableIdx -= Float(self.tableSize - 1)
                 }
-                actualSelf.currWavetableIdx = nextWavetableIdx
+                self.currWavetableIdx = nextWavetableIdx
 
                 for buffer in ablPointer {
                     let buf: UnsafeMutableBufferPointer<Float> = UnsafeMutableBufferPointer(buffer)
                     buf[frameIdx] = currSample
                 }
             }
+            self.samplesToSpeak -= numFrames
 
             return noErr
         }
@@ -112,6 +111,11 @@ class DistanceSpeaker {
         samplesPtr[tableSize - 1] = samplesPtr[0];
 
         return samplesPtr
+    }()
+
+    private let timeToSpeak: TimeInterval
+    private lazy var samplesToSpeak: Int = {
+        return Int(self.timeToSpeak * self.format.sampleRate)
     }()
 
     private let tableSize: Int = 4096
