@@ -328,12 +328,12 @@ class DistanceListener {
     private static let highpassGain: Float = -12
 
     // ==== FFT constants ====
-    private static let fftSize = 32 // For accuracy of at least 1ms at 44100kHZ
-    private static let halfFFTSize = 16
+    static let fftSize = 32 // For accuracy of at least 1ms at 44100kHZ
+    static let halfFFTSize = 16
     private static let hopSize = 16
 
     // ==== Detection constants ====
-    private static let minFreqListenHz: Freq = 1000
+    static let minFreqListenHz: Freq = 1000
     private static let scoreThresh: Float = 0.5
     private static let toneLenToleranceTime: TimeInterval = 0.002 // arbitrary
     // END STATIC CONSTANTS
@@ -393,7 +393,7 @@ class DistanceListener {
     }()
 
     // ==== AVAudio state ====
-    private var sinkNode: AVAudioSinkNode! = nil
+    private(set) var sinkNode: AVAudioSinkNode! = nil
     private weak var audioEngine: AVAudioEngine? = nil
     // END STATE
 

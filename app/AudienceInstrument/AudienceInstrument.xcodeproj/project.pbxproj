@@ -32,6 +32,30 @@
 		6B8E6F8E2BBA80AE002B84AC /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */; };
 		6BAEE58D2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */; };
 		6BAEE58F2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */; };
+		6BAEE5AB2BCE594300370F6C /* test_15_tones_staggered_cut_off_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5932BCE594300370F6C /* test_15_tones_staggered_cut_off_music1.wav */; };
+		6BAEE5AC2BCE594300370F6C /* test_15_tones_staggered_cut_off_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5942BCE594300370F6C /* test_15_tones_staggered_cut_off_music2.wav */; };
+		6BAEE5AD2BCE594300370F6C /* test_0_tones_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5952BCE594300370F6C /* test_0_tones_crowd.wav */; };
+		6BAEE5AE2BCE594300370F6C /* test_1_tone_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5962BCE594300370F6C /* test_1_tone_crowd.wav */; };
+		6BAEE5AF2BCE594300370F6C /* test_15_tones_overlap_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5972BCE594300370F6C /* test_15_tones_overlap_music2.wav */; };
+		6BAEE5B02BCE594300370F6C /* test_15_tones_staggered_cut_off_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5982BCE594300370F6C /* test_15_tones_staggered_cut_off_crowd.wav */; };
+		6BAEE5B12BCE594300370F6C /* test_1_tone_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5992BCE594300370F6C /* test_1_tone_music2.wav */; };
+		6BAEE5B22BCE594300370F6C /* test_15_tones_overlap_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59A2BCE594300370F6C /* test_15_tones_overlap_crowd.wav */; };
+		6BAEE5B32BCE594300370F6C /* test_15_tones_overlap_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59B2BCE594300370F6C /* test_15_tones_overlap_music1.wav */; };
+		6BAEE5B42BCE594300370F6C /* test_1_tone_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59C2BCE594300370F6C /* test_1_tone_music1.wav */; };
+		6BAEE5B52BCE594300370F6C /* test_15_tones_staggered_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59D2BCE594300370F6C /* test_15_tones_staggered_music1.wav */; };
+		6BAEE5B62BCE594300370F6C /* test_15_tones_staggered_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59E2BCE594300370F6C /* test_15_tones_staggered_music2.wav */; };
+		6BAEE5B72BCE594300370F6C /* test_15_tones_overlap.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE59F2BCE594300370F6C /* test_15_tones_overlap.wav */; };
+		6BAEE5B82BCE594300370F6C /* test_15_tones_staggered.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A02BCE594300370F6C /* test_15_tones_staggered.wav */; };
+		6BAEE5B92BCE594300370F6C /* test_4_tones_separate.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A12BCE594300370F6C /* test_4_tones_separate.wav */; };
+		6BAEE5BA2BCE594300370F6C /* test_0_tones.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A22BCE594300370F6C /* test_0_tones.wav */; };
+		6BAEE5BB2BCE594300370F6C /* test_15_tones_staggered_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A32BCE594300370F6C /* test_15_tones_staggered_crowd.wav */; };
+		6BAEE5BC2BCE594300370F6C /* test_15_tones_staggered_cut_off.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A42BCE594300370F6C /* test_15_tones_staggered_cut_off.wav */; };
+		6BAEE5BD2BCE594300370F6C /* test_0_tones_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A52BCE594300370F6C /* test_0_tones_music1.wav */; };
+		6BAEE5BE2BCE594300370F6C /* test_1_tone.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A62BCE594300370F6C /* test_1_tone.wav */; };
+		6BAEE5BF2BCE594300370F6C /* test_0_tones_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A72BCE594300370F6C /* test_0_tones_music2.wav */; };
+		6BAEE5C02BCE594300370F6C /* test_4_tones_separate_music1.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A82BCE594300370F6C /* test_4_tones_separate_music1.wav */; };
+		6BAEE5C12BCE594300370F6C /* test_4_tones_separate_crowd.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5A92BCE594300370F6C /* test_4_tones_separate_crowd.wav */; };
+		6BAEE5C22BCE594300370F6C /* test_4_tones_separate_music2.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BAEE5AA2BCE594300370F6C /* test_4_tones_separate_music2.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,6 +108,30 @@
 		6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = AudienceInstrument.xctestplan; sourceTree = SOURCE_ROOT; };
 		6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNodeTests.swift; sourceTree = "<group>"; };
 		6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNodeTests.swift; sourceTree = "<group>"; };
+		6BAEE5932BCE594300370F6C /* test_15_tones_staggered_cut_off_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_cut_off_music1.wav; sourceTree = "<group>"; };
+		6BAEE5942BCE594300370F6C /* test_15_tones_staggered_cut_off_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_cut_off_music2.wav; sourceTree = "<group>"; };
+		6BAEE5952BCE594300370F6C /* test_0_tones_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_0_tones_crowd.wav; sourceTree = "<group>"; };
+		6BAEE5962BCE594300370F6C /* test_1_tone_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_1_tone_crowd.wav; sourceTree = "<group>"; };
+		6BAEE5972BCE594300370F6C /* test_15_tones_overlap_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_overlap_music2.wav; sourceTree = "<group>"; };
+		6BAEE5982BCE594300370F6C /* test_15_tones_staggered_cut_off_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_cut_off_crowd.wav; sourceTree = "<group>"; };
+		6BAEE5992BCE594300370F6C /* test_1_tone_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_1_tone_music2.wav; sourceTree = "<group>"; };
+		6BAEE59A2BCE594300370F6C /* test_15_tones_overlap_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_overlap_crowd.wav; sourceTree = "<group>"; };
+		6BAEE59B2BCE594300370F6C /* test_15_tones_overlap_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_overlap_music1.wav; sourceTree = "<group>"; };
+		6BAEE59C2BCE594300370F6C /* test_1_tone_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_1_tone_music1.wav; sourceTree = "<group>"; };
+		6BAEE59D2BCE594300370F6C /* test_15_tones_staggered_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_music1.wav; sourceTree = "<group>"; };
+		6BAEE59E2BCE594300370F6C /* test_15_tones_staggered_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_music2.wav; sourceTree = "<group>"; };
+		6BAEE59F2BCE594300370F6C /* test_15_tones_overlap.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_overlap.wav; sourceTree = "<group>"; };
+		6BAEE5A02BCE594300370F6C /* test_15_tones_staggered.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered.wav; sourceTree = "<group>"; };
+		6BAEE5A12BCE594300370F6C /* test_4_tones_separate.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_4_tones_separate.wav; sourceTree = "<group>"; };
+		6BAEE5A22BCE594300370F6C /* test_0_tones.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_0_tones.wav; sourceTree = "<group>"; };
+		6BAEE5A32BCE594300370F6C /* test_15_tones_staggered_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_crowd.wav; sourceTree = "<group>"; };
+		6BAEE5A42BCE594300370F6C /* test_15_tones_staggered_cut_off.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_15_tones_staggered_cut_off.wav; sourceTree = "<group>"; };
+		6BAEE5A52BCE594300370F6C /* test_0_tones_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_0_tones_music1.wav; sourceTree = "<group>"; };
+		6BAEE5A62BCE594300370F6C /* test_1_tone.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_1_tone.wav; sourceTree = "<group>"; };
+		6BAEE5A72BCE594300370F6C /* test_0_tones_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_0_tones_music2.wav; sourceTree = "<group>"; };
+		6BAEE5A82BCE594300370F6C /* test_4_tones_separate_music1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_4_tones_separate_music1.wav; sourceTree = "<group>"; };
+		6BAEE5A92BCE594300370F6C /* test_4_tones_separate_crowd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_4_tones_separate_crowd.wav; sourceTree = "<group>"; };
+		6BAEE5AA2BCE594300370F6C /* test_4_tones_separate_music2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_4_tones_separate_music2.wav; sourceTree = "<group>"; };
 		AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; name = "AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; path = "MockingbirdMocks/AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -111,6 +159,7 @@
 		6B05ADF02BBE01C900E99323 /* AudienceInstrumentTests */ = {
 			isa = PBXGroup;
 			children = (
+				6BAEE5922BCE594300370F6C /* Resources */,
 				6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */,
 				6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */,
 				6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */,
@@ -178,6 +227,37 @@
 				6B05ADD12BBDFDD100E99323 /* ConnectionManager.pb.swift */,
 			);
 			name = Protobuf;
+			sourceTree = "<group>";
+		};
+		6BAEE5922BCE594300370F6C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				6BAEE5932BCE594300370F6C /* test_15_tones_staggered_cut_off_music1.wav */,
+				6BAEE5942BCE594300370F6C /* test_15_tones_staggered_cut_off_music2.wav */,
+				6BAEE5952BCE594300370F6C /* test_0_tones_crowd.wav */,
+				6BAEE5962BCE594300370F6C /* test_1_tone_crowd.wav */,
+				6BAEE5972BCE594300370F6C /* test_15_tones_overlap_music2.wav */,
+				6BAEE5982BCE594300370F6C /* test_15_tones_staggered_cut_off_crowd.wav */,
+				6BAEE5992BCE594300370F6C /* test_1_tone_music2.wav */,
+				6BAEE59A2BCE594300370F6C /* test_15_tones_overlap_crowd.wav */,
+				6BAEE59B2BCE594300370F6C /* test_15_tones_overlap_music1.wav */,
+				6BAEE59C2BCE594300370F6C /* test_1_tone_music1.wav */,
+				6BAEE59D2BCE594300370F6C /* test_15_tones_staggered_music1.wav */,
+				6BAEE59E2BCE594300370F6C /* test_15_tones_staggered_music2.wav */,
+				6BAEE59F2BCE594300370F6C /* test_15_tones_overlap.wav */,
+				6BAEE5A02BCE594300370F6C /* test_15_tones_staggered.wav */,
+				6BAEE5A12BCE594300370F6C /* test_4_tones_separate.wav */,
+				6BAEE5A22BCE594300370F6C /* test_0_tones.wav */,
+				6BAEE5A32BCE594300370F6C /* test_15_tones_staggered_crowd.wav */,
+				6BAEE5A42BCE594300370F6C /* test_15_tones_staggered_cut_off.wav */,
+				6BAEE5A52BCE594300370F6C /* test_0_tones_music1.wav */,
+				6BAEE5A62BCE594300370F6C /* test_1_tone.wav */,
+				6BAEE5A72BCE594300370F6C /* test_0_tones_music2.wav */,
+				6BAEE5A82BCE594300370F6C /* test_4_tones_separate_music1.wav */,
+				6BAEE5A92BCE594300370F6C /* test_4_tones_separate_crowd.wav */,
+				6BAEE5AA2BCE594300370F6C /* test_4_tones_separate_music2.wav */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		F9680AB6E92A6D73EE1E94FA /* Generated Mocks */ = {
@@ -281,6 +361,30 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6BAEE5B42BCE594300370F6C /* test_1_tone_music1.wav in Resources */,
+				6BAEE5B32BCE594300370F6C /* test_15_tones_overlap_music1.wav in Resources */,
+				6BAEE5B62BCE594300370F6C /* test_15_tones_staggered_music2.wav in Resources */,
+				6BAEE5C12BCE594300370F6C /* test_4_tones_separate_crowd.wav in Resources */,
+				6BAEE5BA2BCE594300370F6C /* test_0_tones.wav in Resources */,
+				6BAEE5B82BCE594300370F6C /* test_15_tones_staggered.wav in Resources */,
+				6BAEE5B52BCE594300370F6C /* test_15_tones_staggered_music1.wav in Resources */,
+				6BAEE5B92BCE594300370F6C /* test_4_tones_separate.wav in Resources */,
+				6BAEE5B02BCE594300370F6C /* test_15_tones_staggered_cut_off_crowd.wav in Resources */,
+				6BAEE5BE2BCE594300370F6C /* test_1_tone.wav in Resources */,
+				6BAEE5BD2BCE594300370F6C /* test_0_tones_music1.wav in Resources */,
+				6BAEE5BC2BCE594300370F6C /* test_15_tones_staggered_cut_off.wav in Resources */,
+				6BAEE5BB2BCE594300370F6C /* test_15_tones_staggered_crowd.wav in Resources */,
+				6BAEE5AE2BCE594300370F6C /* test_1_tone_crowd.wav in Resources */,
+				6BAEE5AB2BCE594300370F6C /* test_15_tones_staggered_cut_off_music1.wav in Resources */,
+				6BAEE5C02BCE594300370F6C /* test_4_tones_separate_music1.wav in Resources */,
+				6BAEE5AF2BCE594300370F6C /* test_15_tones_overlap_music2.wav in Resources */,
+				6BAEE5AD2BCE594300370F6C /* test_0_tones_crowd.wav in Resources */,
+				6BAEE5C22BCE594300370F6C /* test_4_tones_separate_music2.wav in Resources */,
+				6BAEE5BF2BCE594300370F6C /* test_0_tones_music2.wav in Resources */,
+				6BAEE5B12BCE594300370F6C /* test_1_tone_music2.wav in Resources */,
+				6BAEE5B22BCE594300370F6C /* test_15_tones_overlap_crowd.wav in Resources */,
+				6BAEE5AC2BCE594300370F6C /* test_15_tones_staggered_cut_off_music2.wav in Resources */,
+				6BAEE5B72BCE594300370F6C /* test_15_tones_overlap.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
