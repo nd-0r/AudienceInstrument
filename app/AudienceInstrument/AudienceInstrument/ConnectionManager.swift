@@ -343,7 +343,7 @@ actor ConnectionManager:
                 )
             case .measurementMessage(var measurementMessage):
 //                print("LATENCY REPLY")
-                let recvTimeInNs = Self.getCurrentTimeInNs()
+                let recvTimeInNs = getCurrentTimeInNs()
 
                 if await measurementMessage.initiatingPeerID == self.selfId.hashValue {
                     await completeLatencyTest(
@@ -353,7 +353,7 @@ actor ConnectionManager:
                     )
                 } else {
                     // reply to the ping
-                    measurementMessage.delayInNs = Self.getCurrentTimeInNs() - recvTimeInNs
+                    measurementMessage.delayInNs = getCurrentTimeInNs() - recvTimeInNs
                     let outData = try! message.serializedData()
 
                     do {
@@ -650,7 +650,7 @@ actor ConnectionManager:
     private func initiateLatencyTest() async {
         pingSeqNum += 1
         expectedPingReplies = UInt(sessionsByPeer.count)
-        pingStartTimeNs = Self.getCurrentTimeInNs()
+        pingStartTimeNs = getCurrentTimeInNs()
 
         let data = try! MessageWrapper.with {
             $0.data = .measurementMessage(MeasurementMessage.with {
@@ -707,7 +707,7 @@ actor ConnectionManager:
             return
         }
 
-        let currLatency = Double(Self.getCurrentTimeInNs() - currPingStartTimeNs - replyDelay) / 2.0
+        let currLatency = Double(getCurrentTimeInNs() - currPingStartTimeNs - replyDelay) / 2.0
 
         if let lastLatency = await model.estimatedLatencyByPeerInNs[fromPeer] {
             Task { @MainActor in
@@ -727,12 +727,4 @@ actor ConnectionManager:
         }
     }
 
-    @inline(__always)
-    static private func getCurrentTimeInNs() -> UInt64 {
-        var timeBaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timeBaseInfo)
-        let timeUnits = mach_absolute_time()
-
-        return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
-    }
 }

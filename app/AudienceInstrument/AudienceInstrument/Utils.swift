@@ -69,3 +69,13 @@ import MultipeerConnectivity
 
     return debugConnectionManagerModel
 }
+
+
+@inline(__always)
+func getCurrentTimeInNs() -> UInt64 {
+    var timeBaseInfo = mach_timebase_info_data_t()
+    mach_timebase_info(&timeBaseInfo)
+    let timeUnits = mach_absolute_time()
+
+    return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+}

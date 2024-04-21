@@ -381,7 +381,7 @@ struct DistanceManager {
             print("ACCEPTED SPOKE FROM: \(from)") // TODO: remove
             #endif
 
-            let processingDelay = Self.getCurrentTimeInNs() - receivedAt
+            let processingDelay = getCurrentTimeInNs() - receivedAt
             Self.distanceCalculator!.heardPeerSpeak(
                 peer: from,
                 processingDelay: processingDelay,
@@ -481,15 +481,6 @@ struct DistanceManager {
 
         peersToAdd.removeAll()
         peersToRemove.removeAll()
-    }
-
-    @inline(__always)
-    static private func getCurrentTimeInNs() -> UInt64 {
-        var timeBaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timeBaseInfo)
-        let timeUnits = mach_absolute_time()
-
-        return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
     }
 
     private static var sendDelegate: (any DistanceManagerSendDelegate)?
