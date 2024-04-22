@@ -8,10 +8,36 @@
 import Foundation
 import MultipeerConnectivity
 
+enum DistanceCalculatorMode: CustomStringConvertible, Equatable {
+    var description: String {
+        switch self {
+        case .speaker(let freq):
+            "Speaker[\(freq)Hz]"
+        case .listener:
+            "Listener"
+        }
+    }
+
+    static func ==(lhs: DistanceCalculatorMode, rhs: DistanceCalculatorMode) -> Bool {
+        switch (lhs, rhs) {
+        case (.speaker(_), .speaker(_)):
+            return true
+        case (.listener, .listener):
+            return true
+        default:
+            return false
+        }
+    }
+
+    case speaker(freq: DistanceListener.Freq)
+    case listener
+}
+
 protocol DistanceCalculatorProtocol{
+    func setupForMode(mode: DistanceCalculatorMode) throws
     func registerPeer(peer: DistanceManager.PeerID) -> Void
     func deregisterPeer(peer: DistanceManager.PeerID) -> Void
-    func speak() throws -> UInt64
+    func speak(receivedAt: UInt64) throws -> UInt64
     func listen() throws -> Void
     func heardPeerSpeak(peer: DistanceManager.PeerID, processingDelay: UInt64, reportedSpeakingDelay: UInt64) -> Void
     func calculateDistances() -> ([DistanceManager.PeerID], [DistanceManager.DistInMeters])
@@ -127,6 +153,16 @@ struct DistanceManager {
                 }
             )
 
+            do {
+                try Self.distanceCalculator!.setupForMode(mode: .listener)
+            } catch {
+                #if DEBUG
+                print("\(String(describing: Self.self)): Failed to set up distance calculator for speaking mode after receiving init. Error: \(error).")
+                #endif
+                // TODO: Maybe do something else here?
+                return
+            }
+
             if retries > 0 {
                 Self.scheduleTimeout(
                     expectedStateByDeadline: .initiator(.speak(.any)),
@@ -143,6 +179,7 @@ struct DistanceManager {
                     deadlineFromNow: withInitTimeout,
                     actionOnUnreachedTarget: {
                         Self.initAckedPeers.removeAll()
+                        Self.resetToDone()
                     }
                 )
             }
@@ -155,12 +192,12 @@ struct DistanceManager {
         receivedAt: UInt64
     ) throws {
         switch message.type {
-        case .init_p:
-            Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from) }
+        case .init_p(let initMessage):
+            Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from, withFreq: DistanceListener.Freq(initMessage.freq)) }
         case .initAck:
             Self.dispatchQueue.async { Self.didReceiveInitAck(from: from) }
         case .speak:
-            Self.dispatchQueue.async { Self.didReceiveSpeak(from: from) }
+            Self.dispatchQueue.async { Self.didReceiveSpeak(from: from, receivedAt: receivedAt) }
         case .spoke(let spoke):
             Self.dispatchQueue.async { Self.didReceiveSpoke(from: from, receivedAt: receivedAt, delayInNs: spoke.delayInNs) }
         case .done(let done):
@@ -212,7 +249,7 @@ struct DistanceManager {
         )
     }
 
-    private static func didReceiveInit(fromPeer: PeerID) {
+    private static func didReceiveInit(fromPeer: PeerID, withFreq freq: DistanceListener.Freq) {
         switch Self.dmState {
         case .done:
             break
@@ -251,6 +288,16 @@ struct DistanceManager {
                 )}
             )
         case .noneCalculated:
+            do {
+                try Self.distanceCalculator!.setupForMode(mode: .speaker(freq: freq))
+            } catch {
+                #if DEBUG
+                print("\(String(describing: Self.self)): Failed to set up distance calculator for speaking mode after receiving init. Error: \(error).")
+                #endif
+                // TODO: Maybe do something else here?
+                return
+            }
+
             Self.sendDelegate?.send(
                 toPeers: [fromPeer],
                 withMessage: DistanceProtocolWrapper.with {
@@ -260,7 +307,10 @@ struct DistanceManager {
             Self.dmState = .speaker(.initAcked(.certain(fromPeer)))
             Self.scheduleTimeout(
                 expectedStateByDeadline: .speaker(.spoke(.any)),
-                timeoutTargetState: .done
+                timeoutTargetState: .done,
+                actionOnUnreachedTarget: {
+                    Self.resetToDone()
+                }
             )
         }
     }
@@ -318,7 +368,7 @@ struct DistanceManager {
         }
     }
 
-    private static func didReceiveSpeak(from: PeerID) {
+    private static func didReceiveSpeak(from: PeerID, receivedAt: UInt64) {
         guard let actualSendDelegate = Self.sendDelegate else {
             fatalError("Received Speak with no send delegate registered: This should not be possible.")
         }
@@ -329,7 +379,7 @@ struct DistanceManager {
                 fatalError("Received speak from peer (\(from)) which is not the initiator (\(initPeer)): This should not be possible.")
             }
 
-            guard let delay = try? Self.distanceCalculator!.speak() else {
+            guard let delay = try? Self.distanceCalculator!.speak(receivedAt: receivedAt) else {
                 // TODO: Might want to change this
                 return // let initiator time out
             }
@@ -346,7 +396,10 @@ struct DistanceManager {
             Self.dmState = .speaker(.spoke(.certain(from)))
             scheduleTimeout(
                 expectedStateByDeadline: .done,
-                timeoutTargetState: .done
+                timeoutTargetState: .done,
+                actionOnUnreachedTarget: {
+                    Self.resetToDone()
+                }
             )
             break
         case .speaker(.spoke(let initPeer)):
@@ -411,7 +464,7 @@ struct DistanceManager {
 
         Self.distByPeer[from] = .someCalculated(withCalcDist)
         Self.updateDelegate!.didUpdate(distancesByPeer: Self.distByPeer)
-        Self.dmState = .done
+        Self.resetToDone()
     }
 
     private static func cancelTimeouts() {

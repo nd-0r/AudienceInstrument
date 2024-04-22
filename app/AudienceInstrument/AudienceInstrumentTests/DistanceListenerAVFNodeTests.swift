@@ -281,8 +281,13 @@ class DistanceListenerIntegrationTests: XCTestCase {
         }
 
         let distanceListener = DL(format: self.format,
-                                  frequenciesToListenFor: freqs,
                                   expectedToneTime: 1.0)
+        for freq in freqs {
+            if !distanceListener.addFrequency(frequency: freq) {
+                throw DLITError.internalFailure("\(testName): Failed adding frequency \(freq) to DistanceListener.")
+            }
+        }
+
         guard audioFile.fileFormat.sampleRate == self.format.sampleRate &&
               audioFile.fileFormat.channelCount == 1 else {
             throw DLITError.internalFailure("\(testName): Need audio file with 1 channel at 44.1kHz but got \(audioFile.fileFormat.channelCount) channels at \(audioFile.fileFormat.sampleRate).")
@@ -369,12 +374,12 @@ class DistanceListenerIntegrationTests: XCTestCase {
 
         var out: [DL.Freq:Double] = [:]
         for (freq, timeInNS) in actualTimeInNSByfreq {
-            guard let actualTimeInNS = timeInNS else {
-                out[freq] = nil
-                continue
-            }
-
-            out[freq] = Double(Float(actualTimeInNS - approxStartTimeNS) / Float(NSEC_PER_MSEC))
+//            guard let actualTimeInNS = timeInNS else {
+//                out[freq] = nil
+//                continue
+//            }
+//
+            out[freq] = Double(Float(timeInNS - approxStartTimeNS) / Float(NSEC_PER_MSEC))
         }
 
         return out

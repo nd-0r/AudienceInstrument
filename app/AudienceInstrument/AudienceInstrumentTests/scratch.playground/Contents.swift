@@ -1,1 +1,2 @@
-min(Float(0.0), Float.nan)
+print(Float(0) & Float(1))
+

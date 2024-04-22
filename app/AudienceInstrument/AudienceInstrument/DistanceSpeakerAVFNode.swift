@@ -46,9 +46,38 @@ class DistanceSpeaker {
         audioEngine?.detach(self.sourceNode)
     }
 
+    var amp: Float {
+        set {
+            if !self.alreadySetAmp && newValue > 0.0 && newValue <= 1.0 {
+                self.alreadySetAmp = true
+                self._amp = newValue
+            }
+        }
+        get { return self._amp }
+    }
+
+    var speaking: Bool {
+        set {
+            if newValue {
+                self.samplesToSpeakScale = 1
+            } else {
+                self.samplesToSpeakScale = 0
+            }
+        }
+        get {
+            return self.samplesToSpeakScale == 1
+        }
+    }
+
+    var done: Bool {
+        get {
+            return self.samplesToSpeak <= 0
+        }
+    }
+
 // MARK: Private interface
     private func computeWavetableStep() -> Float {
-        let tableSizeOverSampleRate = Float(tableSize) / Float(format.sampleRate);
+        let tableSizeOverSampleRate = Float(Self.tableSize) / Float(format.sampleRate);
         return Float(freq) * tableSizeOverSampleRate;
     }
 
@@ -57,7 +86,7 @@ class DistanceSpeaker {
         _, _, frameCount, outputData -> OSStatus in
             let ablPointer = UnsafeMutableAudioBufferListPointer(outputData)
 
-            let numFrames = min(Int(frameCount), self.samplesToSpeak)
+            let numFrames = self.samplesToSpeakScale * min(Int(frameCount), self.samplesToSpeak)
             for frameIdx in 0..<numFrames {
                 let index0 = Int(self.currWavetableIdx)
                 let index1 = index0 + 1
@@ -77,15 +106,15 @@ class DistanceSpeaker {
                 // 4094.999999... Then, `index1` would be
                 // floor(4094.999999...) + 1 = 4095, which is the last
                 // index in the table.
-                if (nextWavetableIdx > Float(self.tableSize - 1)) {
+                if (nextWavetableIdx > Float(Self.tableSize - 1)) {
                     // Wrap around the wavetable
-                    nextWavetableIdx -= Float(self.tableSize - 1)
+                    nextWavetableIdx -= Float(Self.tableSize - 1)
                 }
                 self.currWavetableIdx = nextWavetableIdx
 
                 for buffer in ablPointer {
                     let buf: UnsafeMutableBufferPointer<Float> = UnsafeMutableBufferPointer(buffer)
-                    buf[frameIdx] = currSample
+                    buf[frameIdx] = self._amp * currSample
                 }
             }
             self.samplesToSpeak -= numFrames
@@ -94,12 +123,12 @@ class DistanceSpeaker {
         }
     }
 
-    private lazy var wavetable: UnsafeMutablePointer<Float> = {
-        let samplesPtr = UnsafeMutablePointer<Float>.allocate(capacity: self.tableSize)
+    private let wavetable: UnsafeMutableBufferPointer<Float> = {
+        let samplesPtr = UnsafeMutableBufferPointer<Float>.allocate(capacity: DistanceSpeaker.tableSize)
 
         // Fill with one period of sine
         // (self.tableSize - 2) because of linear interpolation
-        let angleDelta = (2 * Double.pi) / Double(self.tableSize - 2)
+        let angleDelta = (2 * Double.pi) / Double(DistanceSpeaker.tableSize - 2)
         var currentAngle = 0.0;
  
         for i in 0..<tableSize {
@@ -113,12 +142,16 @@ class DistanceSpeaker {
         return samplesPtr
     }()
 
+    private var samplesToSpeakScale: Int = 0
+    private var alreadySetAmp: Bool = false
+    private var _amp: Float = 0.0
+
     private let timeToSpeak: TimeInterval
     private lazy var samplesToSpeak: Int = {
         return Int(self.timeToSpeak * self.format.sampleRate)
     }()
 
-    private let tableSize: Int = 4096
+    private static let tableSize: Int = 4096
     private var sourceNode: AVAudioSourceNode! = nil
     private let format: AVAudioFormat
     private let freq: UInt

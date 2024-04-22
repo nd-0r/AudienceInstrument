@@ -39,27 +39,11 @@ class DistanceListener {
     }
 
     init(format: AVAudioFormat,
-         frequenciesToListenFor: [Freq],
          expectedToneTime: TimeInterval,
          audioEngine: AVAudioEngine? = nil,
          constants: Constants = Constants()) {
-        guard let minFreq = frequenciesToListenFor.min() else {
-            fatalError("\(String(describing: DistanceListener.self)): Must listen for at least one frequency.")
-        }
-
-        guard minFreq >= constants.minFreqListenHz else {
-            fatalError("\(String(describing: DistanceListener.self)): Frequencies to listen for must be at least \(constants.minFreqListenHz)Hz.")
-        }
-
-        let maxFreqListenHz = (constants.maxFreqListenHz != nil) ? constants.maxFreqListenHz : Freq(format.sampleRate / 2)
-
-        guard frequenciesToListenFor.max()! <= maxFreqListenHz! else {
-            fatalError("\(String(describing: DistanceListener.self)): Frequencies to listn for must be at most \(Freq(format.sampleRate / 2))Hz")
-        }
-
         self.constants = constants
         self.format = format
-        self.freqs = frequenciesToListenFor
         self.audioEngine = audioEngine
         let expectedToneLenInSamples = UInt(format.sampleRate * expectedToneTime)
         let toneLenToleranceSamples = UInt(constants.toneLenToleranceTime * format.sampleRate)
@@ -85,6 +69,33 @@ class DistanceListener {
         freqBinStartSamples.deallocate()
     }
 
+    func addFrequency(frequency freq: Freq) -> Bool {
+        guard self.sampleProcessorWorker == nil else {
+            #if DEBUG
+            print("Tried to add frequency while DistanceListener is running!")
+            #endif
+            return false
+        }
+
+        guard freq >= constants.minFreqListenHz else {
+            #if DEBUG
+            print("\(String(describing: DistanceListener.self)): Frequencies to listen for must be at least \(constants.minFreqListenHz)Hz. Got \(freq)Hz.")
+            #endif
+            return false
+        }
+
+        let maxFreqListenHz = constants.maxFreqListenHz ?? Freq(format.sampleRate / 2)
+        guard freq <= maxFreqListenHz else {
+            #if DEBUG
+            print("\(String(describing: DistanceListener.self)): Frequencies to listn for must be at most \(maxFreqListenHz)Hz. Got \(freq)Hz.")
+            #endif
+            return false
+        }
+
+        self.freqs.append(freq)
+        return true
+    }
+
     func beginProcessing() {
         let sampleProcessorWorker = DispatchWorkItem {
             self.sampleProcessor()
@@ -93,13 +104,25 @@ class DistanceListener {
         self.sampleProcessorWorker = sampleProcessorWorker
     }
 
-    func stopAndCalcRecvTimeInNSByFreq() -> [Freq:UInt64?]? {
+    @discardableResult
+    func stopAndCalcRecvTimeInNSByFreq() -> [Freq:UInt64]? {
         detachAndDisconnectSink()
         self.sampleProcessorWorker?.cancel()
 
         guard let actualAnchorTime = self.anchorAudioTime else {
+            #if DEBUG
+            print("\(String(describing: Self.self)): Tried to calculate receive time of frequencies without anchor time!")
+            #endif
             return nil
         }
+
+        guard self.freqs.count > 0 else {
+            #if DEBUG
+            print("\(String(describing: Self.self)): Tried to calculate receive time without any registered frequencies.")
+            #endif
+            return nil
+        }
+
         #if DEBUG
         print("Final num samples from start:")
         print(self.numSamplesFromStart)
@@ -632,7 +655,7 @@ class DistanceListener {
 
     // ==== Detection state ====
     private let format: AVAudioFormat
-    private let freqs: [Freq]
+    private var freqs: [Freq] = []
     private var sampleProcessorState: SampleProcessorState = .buffer1(idx: 0)
     var anchorAudioTime: AVAudioTime? = nil
     private let sampleBuffer: RingBuffer<Float> = RingBuffer(capacity: 4096)

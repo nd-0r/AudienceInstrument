@@ -29,7 +29,9 @@ message MessengerMessage {
 
 // MARK: Distance protocol
 
-message Init { }
+message Init {
+   uint32 freq = 1;
+}
 
 message InitAck { }
 

@@ -933,7 +933,7 @@ final class DistanceManagerSpeakerTests: XCTestCase {
 
     func testSpeakerSpeak() async throws {
         DM.addPeers(peers: [initiatorID])
-        given(mockDistanceCalculator.speak()).willReturn(293)
+        given(mockDistanceCalculator.speak(receivedAt: any())).willReturn(293)
 
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
@@ -976,7 +976,7 @@ final class DistanceManagerSpeakerTests: XCTestCase {
 
     func testSpeakerSpeakTimeoutReceivingDone() async throws {
         DM.addPeers(peers: [initiatorID])
-        given(mockDistanceCalculator.speak()).willReturn(127)
+        given(mockDistanceCalculator.speak(receivedAt: any())).willReturn(127)
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
@@ -1032,7 +1032,7 @@ final class DistanceManagerSpeakerTests: XCTestCase {
 
     func testSpeakerReceiveDone() async throws {
         DM.addPeers(peers: [initiatorID])
-        given(mockDistanceCalculator.speak()).willReturn(101)
+        given(mockDistanceCalculator.speak(receivedAt: any())).willReturn(101)
         try DM.receiveMessage(
             message: DistanceProtocolWrapper.with {
                 $0.type = .init_p(Init())
