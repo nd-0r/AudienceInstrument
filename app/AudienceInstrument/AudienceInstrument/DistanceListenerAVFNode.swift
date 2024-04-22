@@ -160,32 +160,45 @@ class DistanceListener {
 
     // TODO: Compute this at compile time
     static func getFreqs(forNumPeers numPeers: UInt, sampleRate: Double, withConstants constants: Constants = Constants()) -> [Freq]? {
+        if numPeers == 0 {
+            return []
+        }
+
         let freqRange = Freq(sampleRate) / 2
         let binWidth = freqRange / Freq(constants.halfFFTSize)
 
-        // Binary search for starting bin index
-        var binIdxLB = 0
-        var binIdxUB = constants.halfFFTSize
-        while binIdxLB != binIdxUB {
-            let currBinIdx = binIdxLB + (binIdxUB - binIdxLB) / 2
-            let currStartFreq = Freq(currBinIdx) * binWidth
-            if currStartFreq < constants.minFreqListenHz {
-                binIdxLB = currBinIdx + 1
-            } else {
-                binIdxUB = currBinIdx
-            }
+        let binIdxLB = Freq(binarySearch(lowerBound: 0, upperBound: constants.halfFFTSize, tooLowPredicate: {
+            Freq($0) * binWidth < constants.minFreqListenHz
+        }))
+        let binIdxUB: Freq
+        if let maxFreqListenHz = constants.maxFreqListenHz {
+            binIdxUB = Freq(binarySearch(lowerBound: Int(binIdxLB), upperBound: constants.halfFFTSize, tooLowPredicate: {
+                Freq($0) * binWidth < maxFreqListenHz
+            }))
+        } else {
+            binIdxUB = Freq(constants.halfFFTSize - 1)
         }
-        let numUsableBins = constants.halfFFTSize - binIdxLB
+
+        let numUsableBins = binIdxUB - binIdxLB
         guard numPeers <= numUsableBins else {
             return nil
         }
 
-        // Just assign the peers sequentially to the highest bin first
+        let halfBinWidthWindowAligned = (binWidth / Freq(2 * constants.fftSize)) * Freq(constants.fftSize)
+        let maxFreqListenHzWindowAligned = ((constants.maxFreqListenHz ?? freqRange) / Freq(constants.fftSize)) * Freq(constants.fftSize)
+
+        guard numPeers > 1 else {
+            return [maxFreqListenHzWindowAligned - halfBinWidthWindowAligned]
+        }
+
+        // Just assign the peers sequentially to the highest freq first as far apart as possible
+        let freqDist = (numUsableBins - 1) * binWidth // Pad with 1/2 bin at each end of the bandwidth
+        let peerFreqStepWindowAligned = (freqDist / (numPeers * Freq(constants.fftSize))) * Freq(constants.fftSize)
         var out = [Freq](repeating: 0, count: Int(numPeers))
-        var peerFreq = binWidth * Freq(constants.halfFFTSize - 1) + binWidth / 2
+        var peerFreq = maxFreqListenHzWindowAligned - halfBinWidthWindowAligned
         for outIdx in 0..<Int(numPeers) {
             out[outIdx] = peerFreq
-            peerFreq -= binWidth
+            peerFreq -= peerFreqStepWindowAligned
         }
 
         return out

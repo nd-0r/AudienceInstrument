@@ -79,3 +79,20 @@ func getCurrentTimeInNs() -> UInt64 {
 
     return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
 }
+
+@inline(__always)
+func binarySearch(lowerBound: Int, upperBound: Int, tooLowPredicate tlp: (Int) -> Bool) -> Int {
+    var lb = lowerBound
+    var ub = upperBound
+    
+    while lb != ub {
+        let curr = lb + (ub - lb) / 2
+        if tlp(curr) {
+            lb = curr + 1
+        } else {
+            ub = curr
+        }
+    }
+
+    return lb
+}

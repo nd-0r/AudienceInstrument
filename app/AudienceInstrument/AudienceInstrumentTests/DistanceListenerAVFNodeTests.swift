@@ -13,40 +13,54 @@ import AVFoundation
 class DistanceListenerUnitTests: XCTestCase {
     typealias DL = DistanceListener
 
-    static let defaultConstants = DL.Constants()
-
-    static func calcMinBinIdx(
-        withNumFreqBins numBins: Int,
-        withMinFreq minFreq: DL.Freq,
-        withSampleRate sr: Double = 44100
-    ) -> Int {
-        let bandwidth = DL.Freq(sr / 2)
-        let binWidth = DL.Freq(Int(bandwidth) / numBins)
-        var out: DL.Freq = 0
-        while out * binWidth < minFreq {
-            out += 1
-        }
-        return Int(out)
-    }
+    
+    static let defaultConstants = DL.Constants(
+        highpassCutoff: 500,
+        highpassGain: -12,
+        highpassQ: 1.0,
+        fftSize: 32,
+        log2n: 5,
+        halfFFTSize: 16,
+        hopSize: 16,
+        minFreqListenHz: 1000,
+        maxFreqListenHz: nil,
+        scoreThresh: 0.2,
+        sdSilenceThresh: 0.01,
+        toneLenToleranceTime: 0.01
+    )
 
     func testGetFreqsNoPeers() {
         let sampleRate: Double = 44100 // Sample rate for testing
         let numPeers: UInt = 0
         let expectedFreqs: [DL.Freq] = []
 
-        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
+        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate, withConstants: Self.defaultConstants)
 
         XCTAssertNotNil(resultFreqs)
         XCTAssertEqual(resultFreqs?.count, Int(numPeers))
         XCTAssertEqual(resultFreqs!, expectedFreqs)
     }
 
-    func testGetFreqsOnePeer() {
+    func testGetFreqsOnePeerFullBandwidth() {
         let sampleRate: Double = 44100 // Sample rate for testing
         let numPeers: UInt = 1
-        let expectedFreqs: [DL.Freq] = [21359]
+        let expectedFreqs: [DL.Freq] = [21376]
 
-        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
+        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate, withConstants: Self.defaultConstants)
+
+        XCTAssertNotNil(resultFreqs)
+        XCTAssertEqual(resultFreqs?.count, Int(numPeers))
+        XCTAssertEqual(resultFreqs!, expectedFreqs)
+    }
+
+    func testGetFreqsOnePeerCustomMax() {
+        let sampleRate: Double = 44100 // Sample rate for testing
+        let numPeers: UInt = 1
+        let expectedFreqs: [DL.Freq] = [9312]
+
+        var constantsOverride = Self.defaultConstants
+        constantsOverride.maxFreqListenHz = 10000
+        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate, withConstants: constantsOverride)
 
         XCTAssertNotNil(resultFreqs)
         XCTAssertEqual(resultFreqs?.count, Int(numPeers))
@@ -56,31 +70,29 @@ class DistanceListenerUnitTests: XCTestCase {
     func testGetFreqs() {
         let sampleRate: Double = 44100 // Sample rate for testing
         let numPeers: UInt = 5
-        let expectedFreqs: [DL.Freq] = [21359, 19981, 18603, 17225, 15847]
+        let expectedFreqs: [DL.Freq] = [21376, 17824, 14272, 10720, 7168]
 
-        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
+        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate, withConstants: Self.defaultConstants)
 
         XCTAssertNotNil(resultFreqs)
         XCTAssertEqual(resultFreqs?.count, Int(numPeers))
         XCTAssertEqual(resultFreqs!, expectedFreqs)
+        for freq in expectedFreqs {
+            XCTAssertEqual(Int(freq) % Self.defaultConstants.fftSize, 0)
+        }
     }
 
     func testGetFreqsMaxPeers() {
         let sampleRate: Double = 44100 // Sample rate for testing
-        let minBinIdx = Self.calcMinBinIdx(
-            withNumFreqBins: Self.defaultConstants.halfFFTSize,
-            withMinFreq: Self.defaultConstants.minFreqListenHz,
-            withSampleRate: sampleRate
-        )
-        let numPeers: UInt = UInt(Self.defaultConstants.halfFFTSize - minBinIdx)
+        let numPeers: UInt = 14
         var expectedFreqs: [DL.Freq] = []
-        var currFreq = 21359
+        var currFreq = 21376
         for _ in 0..<numPeers {
             expectedFreqs.append(DL.Freq(currFreq))
-            currFreq -= 1378
+            currFreq -= 1248
         }
 
-        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
+        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate, withConstants: Self.defaultConstants)
 
         XCTAssertNotNil(resultFreqs)
         XCTAssertEqual(resultFreqs?.count, Int(numPeers))
@@ -89,26 +101,7 @@ class DistanceListenerUnitTests: XCTestCase {
 
     func testGetFreqsTooManyPeers() {
         let sampleRate: Double = 44100 // Sample rate for testing
-        let minBinIdx = Self.calcMinBinIdx(
-            withNumFreqBins: Self.defaultConstants.halfFFTSize,
-            withMinFreq: Self.defaultConstants.minFreqListenHz,
-            withSampleRate: sampleRate
-        )
-        let numPeers: UInt = UInt(Self.defaultConstants.halfFFTSize - minBinIdx + 1) // 1 too many
-
-        let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
-
-        XCTAssertNil(resultFreqs)
-    }
-
-    func testGetFreqsWayTooManyPeers() {
-        let sampleRate: Double = 44100 // Sample rate for testing
-        let minBinIdx = Self.calcMinBinIdx(
-            withNumFreqBins: Self.defaultConstants.halfFFTSize,
-            withMinFreq: Self.defaultConstants.minFreqListenHz,
-            withSampleRate: sampleRate
-        )
-        let numPeers: UInt = UInt(Self.defaultConstants.halfFFTSize - minBinIdx + 13) // way too many
+        let numPeers: UInt = 15
 
         let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
 
@@ -117,17 +110,12 @@ class DistanceListenerUnitTests: XCTestCase {
 
     func testGetFreqsWackySampleRateMaxPeers() {
         let sampleRate: Double = 60058
-        let minBinIdx = Self.calcMinBinIdx(
-            withNumFreqBins: Self.defaultConstants.halfFFTSize,
-            withMinFreq: Self.defaultConstants.minFreqListenHz,
-            withSampleRate: sampleRate
-        )
-        let numPeers: UInt = UInt(Self.defaultConstants.halfFFTSize - minBinIdx)
+        let numPeers: UInt = 14
         var expectedFreqs: [DL.Freq] = []
-        var currFreq = 29078
+        var currFreq = 29088
         for _ in 0..<numPeers {
             expectedFreqs.append(DL.Freq(currFreq))
-            currFreq -= 1876
+            currFreq -= 1728
         }
 
         let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
@@ -139,12 +127,7 @@ class DistanceListenerUnitTests: XCTestCase {
 
     func testGetFreqsWackySampleRateTooManyPeers() {
         let sampleRate: Double = 60058 // Sample rate for testing
-        let minBinIdx = Self.calcMinBinIdx(
-            withNumFreqBins: Self.defaultConstants.halfFFTSize,
-            withMinFreq: Self.defaultConstants.minFreqListenHz,
-            withSampleRate: sampleRate
-        )
-        let numPeers: UInt = UInt(Self.defaultConstants.halfFFTSize - minBinIdx + 1) // 1 too many
+        let numPeers: UInt = 15
 
         let resultFreqs = DL.getFreqs(forNumPeers: numPeers, sampleRate: sampleRate)
 
@@ -160,20 +143,6 @@ class DistanceListenerBufferProcessorUnitTests: XCTestCase {
     enum DLBPError: Error {
         case assertionFailed(message: String)
         case internalFailure(String)
-    }
-
-    static func makeBuffer(buffer: inout UnsafeMutableBufferPointer<Float>,
-                           withFrequencies freqs: [Float],
-                           atSampleRate sr: Int) {
-        buffer.initialize(repeating: 0.0)
-        var phase: Float = 0
-        let phaseStepPerSample = 2.0 * Float.pi / Float(sr)
-        for bufIdx in 0..<buffer.count {
-            for freq in freqs {
-                buffer.baseAddress![bufIdx] += (sin(freq * phase) / Float(freqs.count))
-            }
-            phase += phaseStepPerSample
-        }
     }
 
     static let sampleRate: Float = 44100
@@ -227,25 +196,6 @@ class DistanceListenerBufferProcessorUnitTests: XCTestCase {
         }
     }
 
-    func testMakeBuffer() throws {
-        // Calculated in Python
-        let expectedBuffer: [Float] = [0.0, 0.32478350804043704, 0.07604331989332527, 0.22301775203994595, 0.1418535563215501, 0.2627964208086163, 0.17702613950675788, 0.30791737248642637, 0.01368506454702395, 0.4840232228753463, 0.5930830276810055, 0.3988344371355775, 0.4799769218213784, 0.3971767410256806, 0.45029890222390057, 0.36058961700176695, 0.3998322052367891, 0.10222131647676945, 0.6371172874691071, 0.5234225688591669, 0.3973001544788751, 0.3804905054671267, 0.3165284330997691, 0.28371093346685056, 0.2234626520577777, 0.14653171299980347, -0.06664045339912064, 0.47401814195442477, 0.20559596687175025, 0.17294746782026177, 0.08519695285078269, 0.07874289594140613]
-        let bufFreqs: [Float] = [100, 200, 500, 700, 827, 1000, 5000, 10000, 15000, 20000]
-        Self.makeBuffer(
-            buffer: &self.sampleBuffer,
-            withFrequencies: bufFreqs,
-            atSampleRate: Int(Self.sampleRate)
-        )
-
-        do {
-            try Self.verifyOutput(actual: self.sampleBuffer, expected: expectedBuffer, tolerance: 0.0001)
-        } catch DLBPError.assertionFailed(let message) {
-            XCTFail(message)
-        } catch DLBPError.internalFailure(let message) {
-            fatalError(message)
-        }
-    }
-
     func testDoRFFT() throws {
         // Calculated in Python
         var inputSamples: [Float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.08912755067896491, 0.1949101776390478, 0.2155366495670983, 0.11059700126466285, -0.0856400027595326, -0.2798218114574348, -0.36653174802669863, -0.28443163107183556, -0.053018926071690384, 0.22993217579679415, 0.43117199341511325, 0.4457478032520612, 0.2510744386457876, -0.07605537907764641, -0.3899656329020435, -0.5418121495903657, -0.45053838179370415, -0.14518263072622864, 0.24309346673358076, 0.5377687030210724, 0.5977349736482375, 0.38491695184241903]
@@ -269,7 +219,6 @@ class DistanceListenerBufferProcessorUnitTests: XCTestCase {
         }
     }
 }
-
 
 class DistanceListenerIntegrationTests: XCTestCase {
     typealias DL = DistanceListener
@@ -371,9 +320,6 @@ class DistanceListenerIntegrationTests: XCTestCase {
             throw DLITError.internalFailure("\(testName): Failed starting audio engine: \(error)")
         }
 
-
-//        self.audioEngine.detach(self.filePlayerNode)
-//        self.audioEngine.detach(distanceListener.sinkNode)
 
         // Just scratch space for the audio engine
         let buffer = AVAudioPCMBuffer(pcmFormat: self.audioEngine.manualRenderingFormat,
