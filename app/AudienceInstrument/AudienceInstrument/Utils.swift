@@ -36,7 +36,7 @@ import MultipeerConnectivity
         Int64(n[5].hashValue):NodeMessageManager(peerId: Int64(n[5].hashValue))
     ]
 
-    let estimatedLatencyByPeerInNs: [MCPeerID:Double] = [
+    let estimatedLatencyByPeerInNs: [MCPeerID:UInt64] = [
         n[1]: 8_000_135,
         n[2]: 5_047_300,
         n[3]: 6_200_140,
@@ -44,10 +44,21 @@ import MultipeerConnectivity
         n[6]: 10_750_333
     ]
 
+    let estimatedDistanceByPeerInM: [MCPeerID:DistanceManager.PeerDist] = [
+        n[0]: .noneCalculated,
+        n[1]: .someCalculated(4.21),
+        n[2]: .someCalculated(1.2),
+        n[3]: .someCalculated(6.13),
+        n[4]: .noneCalculated,
+        n[5]: .someCalculated(7.98),
+        n[6]: .someCalculated(0.333)
+    ]
+
     let debugConnectionManagerModel = ConnectionManagerModel(
         sessionPeers: sessionPeers,
         allNodes: allNodes,
         estimatedLatencyByPeerInNs: estimatedLatencyByPeerInNs,
+        estimatedDistanceByPeerInM: estimatedDistanceByPeerInM,
         debugUI: true
     )
 

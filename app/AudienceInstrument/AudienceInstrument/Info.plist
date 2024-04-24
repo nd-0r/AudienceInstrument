@@ -4,6 +4,8 @@
 <dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Bonjour is necessary for discovering other local peers to build the mesh network.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Using the microphone is necessary to calculate the distance between this and other devices using the difference in network versus acoustic delays.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_andreworals-AIn._tcp</string>

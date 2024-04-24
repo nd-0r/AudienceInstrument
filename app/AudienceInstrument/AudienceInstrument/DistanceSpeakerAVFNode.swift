@@ -30,16 +30,23 @@ class DistanceSpeaker {
     }
 
     func attachAndConnectSource(to: AVAudioNode? = nil) {
+        #if DEBUG
+        print("\(String(describing: Self.self)): Attaching and connecting source")
+        #endif
         let output = audioEngine?.outputNode
+
+        audioEngine?.attach(self.sourceNode)
 
         if to != nil {
             audioEngine?.connect(self.sourceNode, to: to!, format: self.format)
         } else if output != nil {
             audioEngine?.connect(self.sourceNode, to: output!, format: self.format)
         } else {
+            #if DEBUG
+            print("\(String(describing: Self.self)): Failed attaching and connecting source: Destination is nil.")
+            #endif
             return
         }
-        audioEngine?.attach(self.sourceNode)
     }
 
     func detachAndDisconnectSource() {
@@ -59,8 +66,14 @@ class DistanceSpeaker {
     var speaking: Bool {
         set {
             if newValue {
+                #if DEBUG
+                print("\(String(describing: Self.self)): Speaking true.")
+                #endif
                 self.samplesToSpeakScale = 1
             } else {
+                #if DEBUG
+                print("\(String(describing: Self.self)): Speaking false.")
+                #endif
                 self.samplesToSpeakScale = 0
             }
         }

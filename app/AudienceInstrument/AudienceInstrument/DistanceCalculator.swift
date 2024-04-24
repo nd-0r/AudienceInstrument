@@ -12,10 +12,11 @@ enum DistanceCalculatorError: Error {
     case unsupportedDevice(String)
     case audioSessionError(String)
     case audioEngineError(String)
+    case latencyError(String)
 }
 
 protocol DistanceCalculatorLatencyDelegate {
-    func getOneWayLatencyInNS(toPeer: DistanceManager.PeerID) -> UInt64
+    func getOneWayLatencyInNS(toPeer: DistanceManager.PeerID) async -> UInt64?
 }
 
 fileprivate struct _DistanceCalculator {
@@ -30,7 +31,35 @@ fileprivate struct _DistanceCalculator {
         try Self.setupListenerOrSpeakerNode()
     }
 
-    static func registerPeer(peer: DM.PeerID, withFrequency freq: UInt) {
+    static func calcFreqsForPeers() -> [DistanceListener.Freq]? {
+        guard let actualListener = Self.listener else {
+            #if DEBUG
+            print("\(typeName): Tried to get freqs for peers without setting up listener!")
+            #endif
+            return nil
+        }
+
+        guard let freqs = actualListener.getFreqs(forNumPeers: UInt(Self.estSpokeTimeByPeer.count)) else {
+            #if DEBUG
+            print("\(typeName): Failed to get frequencies for peers from listener.")
+            #endif
+            return nil
+        }
+
+        for (idx, peer) in Self.estSpokeTimeByPeer.keys.enumerated() {
+            guard actualListener.addFrequency(frequency: freqs[idx]) else {
+                #if DEBUG
+                print("\(typeName): Tried to add frequency but failed in DistanceListener: \(freqs[idx]).")
+                #endif
+                return nil
+            }
+            Self.peersByFreq[freqs[idx]] = peer
+        }
+
+        return freqs
+    }
+
+    static func registerPeer(peer: DM.PeerID) {
         guard Self.state == .listener else {
             #if DEBUG
             print("\(typeName): Tried to register peer not as listener.")
@@ -45,28 +74,13 @@ fileprivate struct _DistanceCalculator {
             return
         }
 
-        guard Self.peersByFreq[freq] == nil else {
-            #if DEBUG
-            print("\(typeName): Tried to register multiple peers with the same freq \(freq).")
-            #endif
-            return
-        }
-
-        guard Self.listener!.addFrequency(frequency: freq) else {
-            #if DEBUG
-            print("\(typeName): Tried to add frequency but failed in DistanceListener: \(freq).")
-            #endif
-            return
-        }
-
-        Self.peersByFreq[freq] = peer
         Self.estSpokeTimeByPeer[peer] = UInt64.max
     }
     
     static func deregisterPeer(peer: DM.PeerID) {
         guard Self.state == .listener else {
             #if DEBUG
-            print("\(typeName): Tried to deregister peer not as speaker.")
+            print("\(typeName): Tried to deregister peer not as listener.")
             #endif
             return
         }
@@ -84,7 +98,11 @@ fileprivate struct _DistanceCalculator {
     }
     
     static func speak(receivedAt: UInt64) throws -> UInt64 {
+        #if DEBUG
+        print("\(typeName): Speaking")
+        #endif
         Self.speaker!.speaking = true
+        Self.speaker!.amp = 1.0 // FIXME: This should be a constant somewhere
         let spokeAt = getCurrentTimeInNs()
         try Self.audioEngine.start()
 
@@ -93,6 +111,9 @@ fileprivate struct _DistanceCalculator {
     }
     
     static func listen() throws {
+        #if DEBUG
+        print("\(typeName): Listening")
+        #endif
         Self.listener!.beginProcessing()
         try Self.audioEngine.start()
     }
@@ -103,6 +124,9 @@ fileprivate struct _DistanceCalculator {
         reportedSpeakingDelay: UInt64,
         withOneWayLatency oneWayLatency: UInt64
     ) {
+        #if DEBUG
+        print("\(typeName): Heard peer speak message")
+        #endif
         let callTime = getCurrentTimeInNs()
         let adjustedSpokeTime = callTime - processingDelay - reportedSpeakingDelay
         Self.estSpokeTimeByPeer[peer] = adjustedSpokeTime - oneWayLatency
@@ -121,6 +145,9 @@ fileprivate struct _DistanceCalculator {
             sem.signal()
         }
         sem.wait()
+        #if DEBUG
+        print("\(typeName): Calculating distances")
+        #endif
 
         var peers: [DM.PeerID] = []
         var distances: [DM.DistInMeters] = []
@@ -137,14 +164,14 @@ fileprivate struct _DistanceCalculator {
                 continue
             }
 
-            guard let spokeTime = Self.estSpokeTimeByPeer[peer] else {
+            guard Self.estSpokeTimeByPeer[peer] != nil && Self.estSpokeTimeByPeer[peer]! != UInt64.max else {
                 #if DEBUG
                 print("\(typeName): No spoke time for peer \(peer)")
                 #endif
                 continue
             }
 
-            let approxDist = Float(Double(recvTime - spokeTime) / Self.speedOfSoundInMPerNS)
+            let approxDist = Float(Double(recvTime - Self.estSpokeTimeByPeer[peer]!) / Self.speedOfSoundInMPerNS)
 
             distances.append(approxDist)
         }
@@ -155,7 +182,7 @@ fileprivate struct _DistanceCalculator {
     static func reset() {
         switch Self.state {
         case .listener:
-            self.listener!.stopAndCalcRecvTimeInNSByFreq()
+            self.listener?.stopAndCalcRecvTimeInNSByFreq()
         case .speaker(_):
             while (!Self.speaker!.done) {
                 // TODO: There's probably a better way to do this, but I
@@ -171,6 +198,7 @@ fileprivate struct _DistanceCalculator {
         Self.audioEngine.reset()
         Self.listener = nil
         Self.speaker = nil
+        Self.state = nil
     }
 
 // Private interface
@@ -178,13 +206,14 @@ fileprivate struct _DistanceCalculator {
     private init() {}
 
     private static func setupListenerOrSpeakerNode() throws {
-        let format = Self.audioEngine.inputNode.inputFormat(forBus: AVAudioNodeBus(0))
-        guard format.sampleRate >= Double(Self.listenerConstants.maxFreqListenHz! * 2) else {
-            throw DistanceCalculatorError.audioEngineError("\(String(describing: Self.self)): Sample rate \(format.sampleRate) is not high enough for max frequency: \(Self.listenerConstants.maxFreqListenHz).")
-        }
 
         switch Self.state {
         case .some(.listener):
+            let format = Self.audioEngine.inputNode.inputFormat(forBus: AVAudioNodeBus(0))
+            guard format.sampleRate >= Double(Self.listenerConstants.maxFreqListenHz! * 2) else {
+                throw DistanceCalculatorError.audioEngineError("\(String(describing: Self.self)): Sample rate \(format.sampleRate) is not high enough for max frequency: \(String(describing: Self.listenerConstants.maxFreqListenHz)).")
+            }
+
             Self.listener = DistanceListener(
                 format: format,
                 expectedToneTime: Self.expectedToneLen,
@@ -192,6 +221,11 @@ fileprivate struct _DistanceCalculator {
                 constants: Self.listenerConstants
             )
         case .some(.speaker(let freq)):
+            let format = Self.audioEngine.outputNode.outputFormat(forBus: AVAudioNodeBus(0))
+            guard format.sampleRate >= Double(Self.listenerConstants.maxFreqListenHz! * 2) else {
+                throw DistanceCalculatorError.audioEngineError("\(String(describing: Self.self)): Sample rate \(format.sampleRate) is not high enough for max frequency: \(String(describing: Self.listenerConstants.maxFreqListenHz)).")
+            }
+
             Self.speaker = DistanceSpeaker(
                 format: format,
                 frequencyToSpeak: freq,
@@ -216,17 +250,17 @@ fileprivate struct _DistanceCalculator {
                 sessionOptions = [.mixWithOthers]
             case .some(.speaker):
                 category = .playback
-                sessionOptions = [.defaultToSpeaker, .interruptSpokenAudioAndMixWithOthers]
+                sessionOptions = [.interruptSpokenAudioAndMixWithOthers]
             case .none:
                 return
         }
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(category, options: sessionOptions)
+            try session.setCategory(category, mode: .measurement, options: sessionOptions)
             try session.setActive(true)
         } catch {
-            fatalError("\(Self.typeName): Failed to configure and activate session for state: \(state) with options: \(sessionOptions).")
+            fatalError("\(Self.typeName): Failed to configure and activate session for state: \(String(describing: state)) with options: \(sessionOptions). Error: \(error).")
         }
     }
 
@@ -262,12 +296,6 @@ fileprivate struct _DistanceCalculator {
         } catch {
             throw DistanceCalculatorError.audioSessionError("Unable to select omnidirectional polar pattern. Error: \(error)")
         }
-
-        do {
-            try session.setActive(true)
-        } catch {
-            throw DistanceCalculatorError.audioSessionError("Unable to set session as active. Error: \(error)")
-        }
     }
     
     // MARK: Core state
@@ -285,7 +313,7 @@ fileprivate struct _DistanceCalculator {
         halfFFTSize: 16,
         hopSize: 16,
         minFreqListenHz: 6000,
-        maxFreqListenHz: 20000,
+        maxFreqListenHz: 8000,
         scoreThresh: 0.2,
         sdSilenceThresh: 0.01,
         toneLenToleranceTime: 0.01
@@ -307,17 +335,16 @@ class DistanceCalculator: DistanceCalculatorProtocol {
         try _DistanceCalculator.setupForMode(mode: mode)
     }
 
-    init(peerFrequencyCalculator: @escaping (DM.PeerID) -> UInt,
-         peerLatencyCalculator: any DistanceCalculatorLatencyDelegate) {
-        self.peerFrequencyCalculator = peerFrequencyCalculator
+    init(peerLatencyCalculator: any DistanceCalculatorLatencyDelegate) {
         self.peerLatencyCalculator = peerLatencyCalculator
     }
 
+    func calcFreqsForPeers() -> [DistanceListener.Freq]? {
+        return _DistanceCalculator.calcFreqsForPeers()
+    }
+
     func registerPeer(peer: DM.PeerID) {
-        _DistanceCalculator.registerPeer(
-            peer: peer,
-            withFrequency: calcPeerFreqMemo(peer: peer)
-        )
+        _DistanceCalculator.registerPeer(peer: peer)
     }
     
     func deregisterPeer(peer: DM.PeerID) {
@@ -336,12 +363,16 @@ class DistanceCalculator: DistanceCalculatorProtocol {
         peer: DM.PeerID,
         processingDelay: UInt64,
         reportedSpeakingDelay: UInt64
-    ) {
+    ) async throws {
+        guard let peerLatency = await self.peerLatencyCalculator.getOneWayLatencyInNS(toPeer: peer) else {
+            throw DistanceCalculatorError.latencyError("No latency available for peer \(peer).")
+        }
+
         _DistanceCalculator.heardPeerSpeak(
             peer: peer,
             processingDelay: processingDelay,
             reportedSpeakingDelay: reportedSpeakingDelay,
-            withOneWayLatency: self.peerLatencyCalculator.getOneWayLatencyInNS(toPeer: peer)
+            withOneWayLatency: peerLatency
         )
     }
     
@@ -366,6 +397,6 @@ class DistanceCalculator: DistanceCalculatorProtocol {
     }
 
     private var peerFrequencyCache: [DM.PeerID:UInt] = [:]
-    private var peerFrequencyCalculator: (DM.PeerID) -> UInt
+    private var peerFrequencyCalculator: (DM.PeerID) -> UInt = { _ in 37 }
     private var peerLatencyCalculator: any DistanceCalculatorLatencyDelegate
 }

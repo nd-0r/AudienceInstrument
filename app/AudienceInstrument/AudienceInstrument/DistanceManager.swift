@@ -36,21 +36,13 @@ enum DistanceCalculatorMode: CustomStringConvertible, Equatable {
 protocol DistanceCalculatorProtocol{
     func setupForMode(mode: DistanceCalculatorMode) throws
     func registerPeer(peer: DistanceManager.PeerID) -> Void
+    func calcFreqsForPeers() -> [DistanceListener.Freq]?
     func deregisterPeer(peer: DistanceManager.PeerID) -> Void
     func speak(receivedAt: UInt64) throws -> UInt64
     func listen() throws -> Void
-    func heardPeerSpeak(peer: DistanceManager.PeerID, processingDelay: UInt64, reportedSpeakingDelay: UInt64) -> Void
-    func calculateDistances() -> ([DistanceManager.PeerID], [DistanceManager.DistInMeters])
+    func heardPeerSpeak(peer: DistanceManager.PeerID, processingDelay: UInt64, reportedSpeakingDelay: UInt64) async throws -> Void
+    func calculateDistances() -> ([MCPeerID], [DistanceManager.DistInMeters])
     func reset() -> Void
-}
-
-protocol DistanceManagerSendDelegate {
-    func send(toPeers: [DistanceManager.PeerID], withMessages: [DistanceProtocolWrapper])
-    func send(toPeers: [DistanceManager.PeerID], withMessage: DistanceProtocolWrapper)
-}
-
-protocol DistanceManagerUpdateDelegate {
-    func didUpdate(distancesByPeer: [DistanceManager.PeerID:DistanceManager.PeerDist])
 }
 
 enum DistanceManagerError: Error {
@@ -59,8 +51,51 @@ enum DistanceManagerError: Error {
     case unimplemented
 }
 
+protocol DistanceManagerUpdateDelegate {
+    func didUpdate(distancesByPeer: [MCPeerID:DistanceManager.PeerDist])
+}
+
+class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiver, DistanceManagerUpdateDelegate {
+    func addPeers(peers: [MCPeerID]) async {
+        DistanceManager.addPeers(peers: peers)
+    }
+
+    func removePeers(peers: [MCPeerID]) async {
+        DistanceManager.removePeers(peers: peers)
+    }
+    
+    func registerSendDelegate(delegate: any NeighborMessageSendDelegate, selfID _: MCPeerID) async {
+        DistanceManager.registerSendDelegate(delegate: delegate)
+    }
+
+    func receiveMessage(
+        message: NeighborAppMessage,
+        from: MCPeerID,
+        receivedAt: UInt64
+    ) async throws {
+        switch message.data {
+        case .distanceProtocolMessage(let distanceProtocolWrapper):
+            try DistanceManager.receiveMessage(message: distanceProtocolWrapper, from: from, receivedAt: receivedAt)
+        default:
+            return
+        }
+    }
+
+    func didUpdate(distancesByPeer: [MCPeerID : DistanceManager.PeerDist]) {
+        guard self.connectionManagerModel != nil else {
+            return
+        }
+
+        Task { @MainActor in
+            self.connectionManagerModel!.estimatedDistanceByPeerInM = distancesByPeer
+        }
+    }
+
+    var connectionManagerModel: ConnectionManagerModel? = nil
+}
+
 /// NOT thread-safe
-struct DistanceManager {
+struct DistanceManager  {
     typealias PeerID = MCPeerID
     typealias DistInMeters = Float
 
@@ -69,7 +104,7 @@ struct DistanceManager {
         case someCalculated(DistInMeters)
     }
 
-    public static func registerSendDelegate(delegate: any DistanceManagerSendDelegate) {
+    public static func registerSendDelegate(delegate: any NeighborMessageSendDelegate) {
         Self.dispatchQueue.async {
             DistanceManager.sendDelegate = delegate
         }
@@ -87,6 +122,9 @@ struct DistanceManager {
 
     public static func addPeers(peers: [PeerID]) {
         Self.dispatchQueue.async {
+            #if DEBUG
+            print("DistanceManager: Adding peers: \(peers)")
+            #endif
             for peer in peers {
                 Self.peersToAdd.insert(PeerToAdd(peerToAdd: peer, peerDist: nil))
             }
@@ -103,8 +141,13 @@ struct DistanceManager {
 
     public static func removePeers(peers: [PeerID]) {
         Self.dispatchQueue.async {
+            #if DEBUG
+            print("DistanceManager: Removing peers: \(peers)")
+            #endif
             for peer in peers {
-                Self.peersToRemove.insert(peer)
+                if Self.distByPeer.keys.contains(where: { $0 == peer }) || Self.peersToAdd.contains(where: { $0.peerToAdd == peer }) {
+                    Self.peersToRemove.insert(peer)
+                }
             }
         }
     }
@@ -112,14 +155,34 @@ struct DistanceManager {
     public static func initiate(
         retries: UInt = 2,
         withInitTimeout: DispatchTimeInterval = .milliseconds(10),
-        withSpokeTimeout: DispatchTimeInterval = .milliseconds(10)
+        withSpokeTimeout: DispatchTimeInterval = .milliseconds(10),
+        toPeers peers: [PeerID]? = nil
     ) {
         Self.dispatchQueue.async {
             #if DEBUG
             print("TRY: \(retries) WITH TIMEOUT: \(withInitTimeout)") // TODO: remove
             #endif
 
-            updateDistByPeer()
+            Self.updateDistByPeer()
+            do {
+                try Self.distanceCalculator!.setupForMode(mode: .listener)
+            } catch {
+                #if DEBUG
+                print("\(String(describing: Self.self)): Failed to set up distance calculator for listening mode when initiating. Error: \(error).")
+                #endif
+                // TODO: Maybe do something else here?
+                Self.resetToDone()
+                return
+            }
+
+            guard peers == nil || peers!.allSatisfy({ p1 in Self.distByPeer[p1] != nil }) else {
+                #if DEBUG
+                print("Tried to initiate with peers not added to distance manager. Peers: \(String(describing: peers)) Current session: \(Self.distByPeer).")
+                #endif
+                Self.resetToDone()
+                return
+            }
+
             Self.spokeTimeout = withSpokeTimeout
 
             guard let actualSendDelegate = DistanceManager.sendDelegate else {
@@ -131,10 +194,11 @@ struct DistanceManager {
                 Self.dmState = .initiator(.`init`(.certain(0)))
                 break
             case .initiator(.`init`(.certain(let numAckedPeers))):
-                if numAckedPeers == Self.distByPeer.count {
+                if numAckedPeers == Self.peersInCurrentRound.count {
                     return
                 }
             default:
+                Self.resetToDone()
                 return
             }
 
@@ -145,23 +209,39 @@ struct DistanceManager {
                 }
             }
 
-            Self.peersInCurrentRound = Array(Self.distByPeer.filter({ (_, v) in v == .noneCalculated }).keys)
-            actualSendDelegate.send(
-                toPeers: Self.peersInCurrentRound,
-                withMessage: DistanceProtocolWrapper.with {
-                    $0.type = .init_p(Init())
+            let peersInRound = peers ?? Array(Self.distByPeer.filter({ (_, v) in v == .noneCalculated }).keys)
+            if Self.peersInCurrentRound.isEmpty {
+                for peer in peersInRound {
+                    Self.distanceCalculator!.registerPeer(peer: peer)
                 }
-            )
+            }
+            Self.peersInCurrentRound = peersInRound
 
-            do {
-                try Self.distanceCalculator!.setupForMode(mode: .listener)
-            } catch {
+            guard let peerFreqs = Self.distanceCalculator!.calcFreqsForPeers() else {
                 #if DEBUG
-                print("\(String(describing: Self.self)): Failed to set up distance calculator for speaking mode after receiving init. Error: \(error).")
+                print("\(String(describing: Self.self)): Failed getting frequencies for peers in current round")
                 #endif
-                // TODO: Maybe do something else here?
+                Self.resetToDone()
                 return
             }
+
+            let messages = peerFreqs.map({ peerFreq in
+                MessageWrapper.with {
+                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                            $0.type = .init_p(Init.with( {
+                                $0.freq = UInt32(peerFreq)
+                            }))
+                        })
+                    })
+                }
+            })
+
+            actualSendDelegate.send(
+                toPeers: Self.peersInCurrentRound,
+                withMessages: messages,
+                withReliability: .reliable
+            )
 
             if retries > 0 {
                 Self.scheduleTimeout(
@@ -193,14 +273,29 @@ struct DistanceManager {
     ) throws {
         switch message.type {
         case .init_p(let initMessage):
+            #if DEBUG
+            print("\(String(describing: Self.self)): Received init message")
+            #endif
             Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from, withFreq: DistanceListener.Freq(initMessage.freq)) }
         case .initAck:
+            #if DEBUG
+            print("\(String(describing: Self.self)): Received init ack message")
+            #endif
             Self.dispatchQueue.async { Self.didReceiveInitAck(from: from) }
         case .speak:
+            #if DEBUG
+            print("\(String(describing: Self.self)): Received speak message")
+            #endif
             Self.dispatchQueue.async { Self.didReceiveSpeak(from: from, receivedAt: receivedAt) }
         case .spoke(let spoke):
+            #if DEBUG
+            print("\(String(describing: Self.self)): Received spOke message")
+            #endif
             Self.dispatchQueue.async { Self.didReceiveSpoke(from: from, receivedAt: receivedAt, delayInNs: spoke.delayInNs) }
         case .done(let done):
+            #if DEBUG
+            print("\(String(describing: Self.self)): Received done message")
+            #endif
             Self.dispatchQueue.async { Self.didReceiveDone(from: from, withCalcDist: done.distanceInM) }
         case .none:
             throw DistanceManagerError.unknownMessageType
@@ -227,7 +322,7 @@ struct DistanceManager {
     private static func scheduleTimeout(
         expectedStateByDeadline: Self.State,
         timeoutTargetState: Self.State?,
-        deadlineFromNow: DispatchTimeInterval = .milliseconds(10), // TODO use network latency
+        deadlineFromNow: DispatchTimeInterval = .seconds(5), // .milliseconds(10), // TODO use network latency // FIXME: don't do this
         actionOnUnreachedTarget: @escaping () -> Void = {}
     ) {
         let workItem = DispatchWorkItem {
@@ -281,11 +376,16 @@ struct DistanceManager {
             // Already calculated this distance: Resend it to the peer bc they must have missed the done message
             Self.sendDelegate?.send(
                 toPeers: [fromPeer],
-                withMessage: DistanceProtocolWrapper.with {
-                    $0.type = .done(Done.with {
-                        $0.distanceInM = calculatedDist
-                    }
-                )}
+                withMessage: MessageWrapper.with {
+                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                            $0.type = .done(Done.with {
+                                $0.distanceInM = calculatedDist
+                            })
+                        })
+                    })
+                },
+                withReliability: .reliable
             )
         case .noneCalculated:
             do {
@@ -300,9 +400,14 @@ struct DistanceManager {
 
             Self.sendDelegate?.send(
                 toPeers: [fromPeer],
-                withMessage: DistanceProtocolWrapper.with {
-                    $0.type = .initAck(InitAck())
-                }
+                withMessage: MessageWrapper.with {
+                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                            $0.type = .initAck(InitAck())
+                        })
+                    })
+                },
+                withReliability: .reliable
             )
             Self.dmState = .speaker(.initAcked(.certain(fromPeer)))
             Self.scheduleTimeout(
@@ -344,12 +449,23 @@ struct DistanceManager {
             if numAckedPeers + 1 == Self.peersInCurrentRound.count {
                 Self.cancelTimeouts()
 
-                try? Self.distanceCalculator!.listen() // TODO catch errors
+                do {
+                    try Self.distanceCalculator!.listen() // TODO handle errors
+                } catch {
+                    #if DEBUG
+                    fatalError("\(String(describing: Self.self)): Failed listening for peers with error: \(error)")
+                    #endif
+                }
                 actualSendDelegate.send(
                     toPeers: Self.peersInCurrentRound,
-                    withMessage: DistanceProtocolWrapper.with {
-                        $0.type = .speak(Speak())
-                    }
+                    withMessage: MessageWrapper.with {
+                        $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                            $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                                $0.type = .speak(Speak())
+                            })
+                        })
+                    },
+                    withReliability: .reliable
                 )
                 Self.dmState = .initiator(.speak(.certain(0)))
                 Self.scheduleTimeout(
@@ -379,18 +495,29 @@ struct DistanceManager {
                 fatalError("Received speak from peer (\(from)) which is not the initiator (\(initPeer)): This should not be possible.")
             }
 
-            guard let delay = try? Self.distanceCalculator!.speak(receivedAt: receivedAt) else {
+            let delay: UInt64
+            do {
+                delay = try Self.distanceCalculator!.speak(receivedAt: receivedAt)
+            } catch {
+                #if DEBUG
+                print("Failed speaking. Error: \(error).")
+                #endif
                 // TODO: Might want to change this
-                return // let initiator time out
+                return
             }
 
             actualSendDelegate.send(
                 toPeers: [initPeer],
-                withMessage: DistanceProtocolWrapper.with {
-                    $0.type = .spoke(Spoke.with {
-                        $0.delayInNs = delay
+                withMessage: MessageWrapper.with {
+                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                            $0.type = .spoke(Spoke.with {
+                                $0.delayInNs = delay
+                            })
+                        })
                     })
-                }
+                },
+                withReliability: .reliable
             )
 
             Self.dmState = .speaker(.spoke(.certain(from)))
@@ -435,11 +562,23 @@ struct DistanceManager {
             #endif
 
             let processingDelay = getCurrentTimeInNs() - receivedAt
-            Self.distanceCalculator!.heardPeerSpeak(
-                peer: from,
-                processingDelay: processingDelay,
-                reportedSpeakingDelay: delayInNs
-            )
+            // FIXME: Until I convert this class to use new swift concurrency this is just how it's gonna be
+            let wait = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    try await Self.distanceCalculator!.heardPeerSpeak(
+                        peer: from,
+                        processingDelay: processingDelay,
+                        reportedSpeakingDelay: delayInNs
+                    )
+                } catch {
+                    #if DEBUG
+                    fatalError("Failed getting latency for spoken peer: \(from).")
+                    #endif
+                }
+                wait.signal()
+            }
+            wait.wait()
 
             if numSpokenPeers + 1 == Self.peersInCurrentRound.count {
                 Self.calculateDistances()
@@ -476,10 +615,18 @@ struct DistanceManager {
     }
 
     private static func resetToDone() {
+        #if DEBUG
+        print("\(String(describing: Self.self)): Reset to done")
+        #endif
         Self.cancelTimeouts()
+        if !Self.peersInCurrentRound.isEmpty {
+            for peer in Self.peersInCurrentRound {
+                Self.distanceCalculator!.deregisterPeer(peer: peer)
+            }
+            Self.peersInCurrentRound = []
+        }
         Self.distanceCalculator?.reset()
         Self.initAckedPeers.removeAll()
-        Self.peersInCurrentRound = []
         Self.dmState = .done
     }
 
@@ -490,21 +637,30 @@ struct DistanceManager {
         }
 
         let messages = calcDists.map({ calcDist in
-            DistanceProtocolWrapper.with {
-                $0.type = .done(Done.with {
-                    $0.distanceInM = calcDist
+            MessageWrapper.with {
+                $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                    $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                        $0.type = .done(Done.with {
+                            $0.distanceInM = calcDist
+                        })
+                    })
                 })
             }
         })
 
         if !messages.isEmpty {
-            Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages)
+            Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages, withReliability: .reliable)
             Self.updateDelegate?.didUpdate(distancesByPeer: Self.distByPeer)
         }
         Self.resetToDone()
     }
 
+    // Called by initiator
+    @discardableResult
     private static func updateDistByPeer() {
+        #if DEBUG
+        print("DistanceManager:updateDistByPeer: Adding \(peersToAdd), Removing \(peersToRemove)")
+        #endif
         for peerAndDistToAdd in peersToAdd {
             let peerToAdd = peerAndDistToAdd.peerToAdd
             let peerDist = peerAndDistToAdd.peerDist
@@ -516,27 +672,24 @@ struct DistanceManager {
             case (true, false):
                 // Peer not already registered and no distance given
                 Self.distByPeer[peerToAdd] = .noneCalculated
-                Self.distanceCalculator!.registerPeer(peer: peerToAdd)
             case (false, true):
                 // Peer was already registered but prioritize given distance
                 Self.distByPeer[peerToAdd] =  peerDist
             case (false, false):
                 // Peer not registered and user given distance
                 Self.distByPeer[peerToAdd] = peerDist
-                Self.distanceCalculator!.registerPeer(peer: peerToAdd)
             }
         }
 
         for peerToRemove in peersToRemove {
             Self.distByPeer[peerToRemove] = nil
-            Self.distanceCalculator!.deregisterPeer(peer: peerToRemove)
         }
 
         peersToAdd.removeAll()
         peersToRemove.removeAll()
     }
 
-    private static var sendDelegate: (any DistanceManagerSendDelegate)?
+    private static var sendDelegate: (any NeighborMessageSendDelegate)?
     private static var updateDelegate: (any DistanceManagerUpdateDelegate)?
     private static var distanceCalculator: (any DistanceCalculatorProtocol)?
     private static var dmState = State.done

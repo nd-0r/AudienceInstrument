@@ -240,20 +240,69 @@ struct MessageWrapper {
     set {data = .networkMessage(newValue)}
   }
 
+  var neighborAppMessage: NeighborAppMessage {
+    get {
+      if case .neighborAppMessage(let v)? = data {return v}
+      return NeighborAppMessage()
+    }
+    set {data = .neighborAppMessage(newValue)}
+  }
+
+  var meshAppMessage: MeshAppMessage {
+    get {
+      if case .meshAppMessage(let v)? = data {return v}
+      return MeshAppMessage()
+    }
+    set {data = .meshAppMessage(newValue)}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  enum OneOf_Data: Equatable {
+    case networkMessage(NetworkMessage)
+    case neighborAppMessage(NeighborAppMessage)
+    case meshAppMessage(MeshAppMessage)
+
+  #if !swift(>=4.1)
+    static func ==(lhs: MessageWrapper.OneOf_Data, rhs: MessageWrapper.OneOf_Data) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch (lhs, rhs) {
+      case (.networkMessage, .networkMessage): return {
+        guard case .networkMessage(let l) = lhs, case .networkMessage(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.neighborAppMessage, .neighborAppMessage): return {
+        guard case .neighborAppMessage(let l) = lhs, case .neighborAppMessage(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.meshAppMessage, .meshAppMessage): return {
+        guard case .meshAppMessage(let l) = lhs, case .meshAppMessage(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      default: return false
+      }
+    }
+  #endif
+  }
+
+  init() {}
+}
+
+struct NeighborAppMessage {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var data: NeighborAppMessage.OneOf_Data? = nil
+
   var measurementMessage: MeasurementMessage {
     get {
       if case .measurementMessage(let v)? = data {return v}
       return MeasurementMessage()
     }
     set {data = .measurementMessage(newValue)}
-  }
-
-  var messengerMessage: MessengerMessage {
-    get {
-      if case .messengerMessage(let v)? = data {return v}
-      return MessengerMessage()
-    }
-    set {data = .messengerMessage(newValue)}
   }
 
   /// more later?
@@ -268,28 +317,18 @@ struct MessageWrapper {
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   enum OneOf_Data: Equatable {
-    case networkMessage(NetworkMessage)
     case measurementMessage(MeasurementMessage)
-    case messengerMessage(MessengerMessage)
     /// more later?
     case distanceProtocolMessage(DistanceProtocolWrapper)
 
   #if !swift(>=4.1)
-    static func ==(lhs: MessageWrapper.OneOf_Data, rhs: MessageWrapper.OneOf_Data) -> Bool {
+    static func ==(lhs: NeighborAppMessage.OneOf_Data, rhs: NeighborAppMessage.OneOf_Data) -> Bool {
       // The use of inline closures is to circumvent an issue where the compiler
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.networkMessage, .networkMessage): return {
-        guard case .networkMessage(let l) = lhs, case .networkMessage(let r) = rhs else { preconditionFailure() }
-        return l == r
-      }()
       case (.measurementMessage, .measurementMessage): return {
         guard case .measurementMessage(let l) = lhs, case .measurementMessage(let r) = rhs else { preconditionFailure() }
-        return l == r
-      }()
-      case (.messengerMessage, .messengerMessage): return {
-        guard case .messengerMessage(let l) = lhs, case .messengerMessage(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
       case (.distanceProtocolMessage, .distanceProtocolMessage): return {
@@ -297,6 +336,44 @@ struct MessageWrapper {
         return l == r
       }()
       default: return false
+      }
+    }
+  #endif
+  }
+
+  init() {}
+}
+
+struct MeshAppMessage {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var data: MeshAppMessage.OneOf_Data? = nil
+
+  var messengerMessage: MessengerMessage {
+    get {
+      if case .messengerMessage(let v)? = data {return v}
+      return MessengerMessage()
+    }
+    set {data = .messengerMessage(newValue)}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  enum OneOf_Data: Equatable {
+    case messengerMessage(MessengerMessage)
+
+  #if !swift(>=4.1)
+    static func ==(lhs: MeshAppMessage.OneOf_Data, rhs: MeshAppMessage.OneOf_Data) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch (lhs, rhs) {
+      case (.messengerMessage, .messengerMessage): return {
+        guard case .messengerMessage(let l) = lhs, case .messengerMessage(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       }
     }
   #endif
@@ -319,6 +396,10 @@ extension DistanceProtocolWrapper: @unchecked Sendable {}
 extension DistanceProtocolWrapper.OneOf_Type: @unchecked Sendable {}
 extension MessageWrapper: @unchecked Sendable {}
 extension MessageWrapper.OneOf_Data: @unchecked Sendable {}
+extension NeighborAppMessage: @unchecked Sendable {}
+extension NeighborAppMessage.OneOf_Data: @unchecked Sendable {}
+extension MeshAppMessage: @unchecked Sendable {}
+extension MeshAppMessage.OneOf_Data: @unchecked Sendable {}
 #endif  // swift(>=5.5) && canImport(_Concurrency)
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -743,9 +824,8 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   static let protoMessageName: String = "MessageWrapper"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     2: .same(proto: "networkMessage"),
-    3: .same(proto: "measurementMessage"),
-    4: .same(proto: "messengerMessage"),
-    5: .same(proto: "distanceProtocolMessage"),
+    3: .same(proto: "neighborAppMessage"),
+    4: .same(proto: "meshAppMessage"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -768,6 +848,80 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
         }
       }()
       case 3: try {
+        var v: NeighborAppMessage?
+        var hadOneofValue = false
+        if let current = self.data {
+          hadOneofValue = true
+          if case .neighborAppMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.data = .neighborAppMessage(v)
+        }
+      }()
+      case 4: try {
+        var v: MeshAppMessage?
+        var hadOneofValue = false
+        if let current = self.data {
+          hadOneofValue = true
+          if case .meshAppMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.data = .meshAppMessage(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.data {
+    case .networkMessage?: try {
+      guard case .networkMessage(let v)? = self.data else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
+    case .neighborAppMessage?: try {
+      guard case .neighborAppMessage(let v)? = self.data else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .meshAppMessage?: try {
+      guard case .meshAppMessage(let v)? = self.data else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: MessageWrapper, rhs: MessageWrapper) -> Bool {
+    if lhs.data != rhs.data {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension NeighborAppMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "NeighborAppMessage"
+  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "measurementMessage"),
+    3: .same(proto: "distanceProtocolMessage"),
+  ]
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
         var v: MeasurementMessage?
         var hadOneofValue = false
         if let current = self.data {
@@ -780,20 +934,7 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
           self.data = .measurementMessage(v)
         }
       }()
-      case 4: try {
-        var v: MessengerMessage?
-        var hadOneofValue = false
-        if let current = self.data {
-          hadOneofValue = true
-          if case .messengerMessage(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.data = .messengerMessage(v)
-        }
-      }()
-      case 5: try {
+      case 3: try {
         var v: DistanceProtocolWrapper?
         var hadOneofValue = false
         if let current = self.data {
@@ -817,28 +958,68 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
     switch self.data {
-    case .networkMessage?: try {
-      guard case .networkMessage(let v)? = self.data else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
     case .measurementMessage?: try {
       guard case .measurementMessage(let v)? = self.data else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    }()
-    case .messengerMessage?: try {
-      guard case .messengerMessage(let v)? = self.data else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     }()
     case .distanceProtocolMessage?: try {
       guard case .distanceProtocolMessage(let v)? = self.data else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: MessageWrapper, rhs: MessageWrapper) -> Bool {
+  static func ==(lhs: NeighborAppMessage, rhs: NeighborAppMessage) -> Bool {
+    if lhs.data != rhs.data {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension MeshAppMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "MeshAppMessage"
+  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "messengerMessage"),
+  ]
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: MessengerMessage?
+        var hadOneofValue = false
+        if let current = self.data {
+          hadOneofValue = true
+          if case .messengerMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.data = .messengerMessage(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if case .messengerMessage(let v)? = self.data {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: MeshAppMessage, rhs: MeshAppMessage) -> Bool {
     if lhs.data != rhs.data {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

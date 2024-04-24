@@ -30,6 +30,8 @@
 		6B6C71ED2BC252680094E152 /* Mockingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 6B6C71EC2BC252680094E152 /* Mockingbird */; };
 		6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8915A92BBFA1270041825C /* DistanceManager.swift */; };
 		6B8E6F8E2BBA80AE002B84AC /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */; };
+		6BA467442BD6ED90006CD075 /* PingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BA467432BD6ED90006CD075 /* PingManager.swift */; };
+		6BA467462BD7829C006CD075 /* PeerDistanceCalculationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BA467452BD7829C006CD075 /* PeerDistanceCalculationView.swift */; };
 		6BAEE58D2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */; };
 		6BAEE58F2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */; };
 		6BF625DE2BD4FEF50029B7B9 /* test_3_tones_staggered.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6BF625DA2BD4FEF50029B7B9 /* test_3_tones_staggered.wav */; };
@@ -86,6 +88,8 @@
 		6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudienceInstrument.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B8915A92BBFA1270041825C /* DistanceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceManager.swift; sourceTree = "<group>"; };
 		6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = AudienceInstrument.xctestplan; sourceTree = SOURCE_ROOT; };
+		6BA467432BD6ED90006CD075 /* PingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingManager.swift; sourceTree = "<group>"; };
+		6BA467452BD7829C006CD075 /* PeerDistanceCalculationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDistanceCalculationView.swift; sourceTree = "<group>"; };
 		6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNodeTests.swift; sourceTree = "<group>"; };
 		6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNodeTests.swift; sourceTree = "<group>"; };
 		6BD8F3AD2BD174AD002DB34A /* scratch.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = scratch.playground; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
@@ -163,6 +167,7 @@
 				6B05ADDF2BBDFE8D00E99323 /* MessageManager.swift */,
 				6B05ADD62BBDFE8D00E99323 /* MessengerView.swift */,
 				6B05ADDC2BBDFE8D00E99323 /* PeerConnectionView.swift */,
+				6BA467452BD7829C006CD075 /* PeerDistanceCalculationView.swift */,
 				6B05ADDA2BBDFE8D00E99323 /* Preview Content */,
 				6B05ADDD2BBDFE8D00E99323 /* Utils.swift */,
 				6B8E6F892BBA7FF2002B84AC /* Protobuf */,
@@ -171,6 +176,7 @@
 				6B1601402BC9B2E40008E11B /* DistanceCalculator.swift */,
 				6B383EC82BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift */,
 				6B383ECC2BCB951B006E8F42 /* RingBuffer.swift */,
+				6BA467432BD6ED90006CD075 /* PingManager.swift */,
 			);
 			path = AudienceInstrument;
 			sourceTree = "<group>";
@@ -363,6 +369,8 @@
 				6B05ADE32BBDFE8D00E99323 /* ChatView.swift in Sources */,
 				6B05ADE12BBDFE8D00E99323 /* MessengerView.swift in Sources */,
 				6B383ECD2BCB951B006E8F42 /* RingBuffer.swift in Sources */,
+				6BA467442BD6ED90006CD075 /* PingManager.swift in Sources */,
+				6BA467462BD7829C006CD075 /* PeerDistanceCalculationView.swift in Sources */,
 				6B8915AA2BBFA1270041825C /* DistanceManager.swift in Sources */,
 				6B1601412BC9B2E40008E11B /* DistanceCalculator.swift in Sources */,
 				6B05ADE92BBDFE8D00E99323 /* AudienceInstrumentApp.swift in Sources */,

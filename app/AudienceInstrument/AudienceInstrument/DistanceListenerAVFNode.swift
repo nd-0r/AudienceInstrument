@@ -97,6 +97,10 @@ class DistanceListener {
     }
 
     func beginProcessing() {
+        #if DEBUG
+        print("\(String(describing: DistanceListener.self)): Beginning processing")
+        #endif
+
         let sampleProcessorWorker = DispatchWorkItem {
             self.sampleProcessor()
         }
@@ -179,6 +183,10 @@ class DistanceListener {
         }
 
         return out
+    }
+
+    func getFreqs(forNumPeers numPeers: UInt) -> [Freq]? {
+        Self.getFreqs(forNumPeers: numPeers, sampleRate: self.format.sampleRate, withConstants: self.constants)
     }
 
     // TODO: Compute this at compile time
@@ -512,6 +520,7 @@ class DistanceListener {
 
     private func attachAndConnectSink(from: AVAudioNode? = nil) {
         let input = audioEngine?.inputNode
+        audioEngine?.attach(self.sinkNode)
 
         if from != nil {
             audioEngine?.connect(from!, to: self.sinkNode, format: self.format)
@@ -520,7 +529,6 @@ class DistanceListener {
         } else {
             return
         }
-        audioEngine?.attach(self.sinkNode)
     }
 
     private func detachAndDisconnectSink() {
@@ -601,13 +609,11 @@ class DistanceListener {
 
                 for sampleIdx in 0..<frameCount {
                     #if DEBUG
-                    if !self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)]) {
-                        guard self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)]) else {
-                            fatalError("Failed to push to sample buffer after waiting on semaphore; this should never happen!")
-                        }
+                    guard self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)]) else {
+                        fatalError("Failed to push to sample buffer; consumer not fast enough!")
                     }
                     #else
-                    self.sampleBuffer.pushFront(element: bufPtr[sampleIdx])
+                    self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)])
                     #endif
                 }
             }

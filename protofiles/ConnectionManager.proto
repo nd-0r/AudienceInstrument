@@ -60,10 +60,22 @@ message DistanceProtocolWrapper {
 message MessageWrapper {
    oneof data {
       NetworkMessage networkMessage = 2;
-      MeasurementMessage measurementMessage = 3;
-      MessengerMessage messengerMessage = 4;
-      DistanceProtocolWrapper distanceProtocolMessage = 5;
+      NeighborAppMessage neighborAppMessage = 3;
+      MeshAppMessage meshAppMessage = 4;
+   }
+}
+
+message NeighborAppMessage {
+   oneof data {
+      MeasurementMessage measurementMessage = 1;
+      DistanceProtocolWrapper distanceProtocolMessage = 3;
       // more later?
+   }
+}
+
+message MeshAppMessage {
+   oneof data {
+      MessengerMessage messengerMessage = 1;
    }
 }
 

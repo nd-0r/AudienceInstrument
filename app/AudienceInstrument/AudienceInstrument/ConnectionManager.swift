@@ -14,7 +14,7 @@ import Darwin.Mach
 protocol ConnectionManagerModelProtocol: ObservableObject {
     var sessionPeers: [MCPeerID:MCSessionState] { get set }
     var allNodes: [ConnectionManager.PeerId:NodeMessageManager] { get set }
-    var estimatedLatencyByPeerInNs: [MCPeerID:Double] { get set }
+    var estimatedLatencyByPeerInNs: [MCPeerID:UInt64] { get set }
 }
 
 extension ForwardingEntry: ForwardingEntryProtocol {
@@ -26,6 +26,26 @@ extension ForwardingEntry: ForwardingEntryProtocol {
     var description: String {
         ""
     }
+}
+
+protocol NeighborMessageReceiver {
+    func receiveMessage(
+        message: NeighborAppMessage,
+        from: MCPeerID, // TODO: PeerID type should be somewhere else
+        receivedAt: UInt64
+    ) async throws
+}
+
+protocol NeighborMessageSendDelegate {
+    // Same TODO: PeerID type should be somewhere else
+    func send(toPeers: [MCPeerID], withMessages: [MessageWrapper], withReliability: MCSessionSendDataMode)
+    func send(toPeers: [MCPeerID], withMessage: MessageWrapper, withReliability: MCSessionSendDataMode)
+}
+
+protocol NeighborMessageSender {
+    func registerSendDelegate(delegate: any NeighborMessageSendDelegate, selfID: MCPeerID) async
+    func addPeers(peers: [MCPeerID]) async
+    func removePeers(peers: [MCPeerID]) async
 }
 
 /// Important to only set connection manager model once and to start advertising/browsing _after_ model is set
@@ -66,31 +86,22 @@ actor ConnectionManager:
 
     private var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>?
 
+    private let neighborApps: [any NeighborMessageSender & NeighborMessageReceiver]
+
     internal var browser: MCNearbyServiceBrowser?
 
     internal var advertiser: MCNearbyServiceAdvertiser?
 
-    // Latency properties
-    nonisolated private let pingTimer: Timer?
-    nonisolated private let pingSemaphore: DispatchSemaphore = DispatchSemaphore(value: 1)
-    nonisolated private let kEWMAFactor: Double = 0.875
-    nonisolated private let kPingInterval: TimeInterval = 1.0
-
-    private var pingStartTimeNs: UInt64? = nil
-    private var pingSeqNum: UInt32 = 0
-    private var expectedPingReplies: UInt = 0
-    private var currPingReplies: UInt = 0
-    // End latency properties
-
     init(
         displayName: String,
+        neighborApps: [any NeighborMessageSender & NeighborMessageReceiver] = [],
         debugUI: Bool = false
     ) {
-        selfId = MCPeerID(displayName: displayName)
+        self.selfId = MCPeerID(displayName: displayName)
+        self.neighborApps = neighborApps
 
         self.debugUI = debugUI
         guard debugUI == false else {
-            pingTimer = nil
             super.init()
             return
         }
@@ -115,33 +126,19 @@ actor ConnectionManager:
             serviceType: kServiceType
         )
 
-        class TimerClosure { // lol
-            weak var owner: ConnectionManager? = nil
-
-            func callAsFunction() -> Void {
-                if let owner = self.owner {
-                    owner.initiateLatencyTestHelper()
-                }
-            }
-        }
-
-        let timerClosure = TimerClosure()
-        pingTimer = Timer.scheduledTimer(
-            withTimeInterval: kPingInterval,
-            repeats: true
-        ) { _ in timerClosure() }
-
         // `self` initialized now
         super.init()
 
-        RunLoop.current.add(pingTimer!, forMode: .common)
-
         sendDelegate.owner = self
         updateDelegate.owner = self
-        timerClosure.owner = self
 
         browser!.delegate = self
         advertiser!.delegate = self
+        Task {
+            for neighborApp in neighborApps {
+                await neighborApp.registerSendDelegate(delegate: sendDelegate, selfID: self.selfId)
+            }
+        }
     }
 
     deinit {
@@ -149,8 +146,10 @@ actor ConnectionManager:
             return
         }
 
-        pingTimer!.invalidate()
         advertiser!.stopAdvertisingPeer()
+        for session in sessionsByPeer.values {
+            session.disconnect()
+        }
     }
 
     public func startAdvertising() async {
@@ -236,6 +235,7 @@ actor ConnectionManager:
         }
     }
 
+    // FIXME: Move messenger stuff out of connection manager
     public func send(
         toPeer peerId: PeerId,
         message: String,
@@ -261,10 +261,12 @@ actor ConnectionManager:
         }
 
         let data: Data = try MessageWrapper.with {
-            $0.data = .messengerMessage(MessengerMessage.with {
-                $0.from = Int64(selfId.hashValue)
-                $0.to = Int64(peerId)
-                $0.message = message
+            $0.data = .meshAppMessage(MeshAppMessage.with {
+                $0.data = .messengerMessage(MessengerMessage.with {
+                    $0.from = Int64(selfId.hashValue)
+                    $0.to = Int64(peerId)
+                    $0.message = message
+                })
             })
         }.serializedData()
 
@@ -272,7 +274,7 @@ actor ConnectionManager:
     }
 
 /* //////////////////////////////////////////////////////////////////////// */
-/* Session */
+/* MARK: Session */
 /* //////////////////////////////////////////////////////////////////////// */
 
     nonisolated func session(
@@ -303,10 +305,16 @@ actor ConnectionManager:
             switch state {
             case .notConnected:
                 try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: nil)
+                for neighborApp in neighborApps {
+                    await neighborApp.removePeers(peers: [peerID])
+                }
             case .connecting:
                 try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: nil)
             case .connected:
                 await addPreviouslyConnectedPeer(peerID: peerID)
+                for neighborApp in neighborApps {
+                    await neighborApp.addPeers(peers: [peerID])
+                }
                 try await self.routingNode!.updateLinkCost(linkId: Int64(peerID.hashValue), newCost: 1 /* TODO */)
             @unknown default:
                 fatalError("Unkonwn peer state in ConnectionManager.session")
@@ -319,6 +327,7 @@ actor ConnectionManager:
         didReceive data: Data,
         fromPeer peerID: MCPeerID
     ) {
+        let recvTime = getCurrentTimeInNs()
         Task { @MainActor in
             guard let model = await connectionManagerModel else {
                 print("MODEL DEINITIALIZED")
@@ -341,45 +350,34 @@ actor ConnectionManager:
                     fromNeighbor: Int64(peerID.hashValue),
                     withDistanceVector: networkMessage.distanceVector
                 )
-            case .measurementMessage(var measurementMessage):
-//                print("LATENCY REPLY")
-                let recvTimeInNs = getCurrentTimeInNs()
-
-                if await measurementMessage.initiatingPeerID == self.selfId.hashValue {
-                    await completeLatencyTest(
-                        fromPeer: peerID,
-                        withSeqNum: measurementMessage.sequenceNumber,
-                        withReplyDelay: measurementMessage.delayInNs
-                    )
-                } else {
-                    // reply to the ping
-                    measurementMessage.delayInNs = getCurrentTimeInNs() - recvTimeInNs
-                    let outData = try! message.serializedData()
-
+            case .neighborAppMessage(let appMessage):
+                for neighborApp in neighborApps {
                     do {
-                        try session.send(outData, toPeers: [peerID], with: .unreliable)
+                        try await neighborApp.receiveMessage(message: appMessage, from: peerID, receivedAt: recvTime)
                     } catch {
-                        print("Failed to reply to ping from \(peerID) with error: \(error)")
+                        print("Failed receiving message at neighbor app: \(error).")
                     }
                 }
-            case .messengerMessage(let messengerMessage):
-                print("RECEIVING MESSAGE")
-                // Forward to message manager
-                DispatchQueue.main.async { Task { @MainActor in
-                    if await messengerMessage.to == self.selfId.hashValue {
-                        model.allNodes[messengerMessage.from]?
-                             .recvMessage(message: messengerMessage.message)
-                    } else {
-                        try await self.send(
-                            toPeer: messengerMessage.to,
-                            message: messengerMessage.message,
-                            with: .reliable
-                        )
-                    }
-                }}
-            default:
-                fatalError("Unexpected message type in ConnectionManager.SessionDelegate.session")
-                // Don't forward to user: Not tagged correctly
+            case .meshAppMessage(let appMessage):
+                switch appMessage.data {
+                case .messengerMessage(let messengerMessage):
+                    print("RECEIVING MESSAGE")
+                    // Forward to message manager
+                    DispatchQueue.main.async { Task { @MainActor in
+                        if await messengerMessage.to == self.selfId.hashValue {
+                            model.allNodes[messengerMessage.from]?
+                                 .recvMessage(message: messengerMessage.message)
+                        } else {
+                            try await self.send(
+                                toPeer: messengerMessage.to,
+                                message: messengerMessage.message,
+                                with: .reliable
+                            )
+                        }
+                    }}
+                default:
+                    fatalError("Unexpected mesh application message type in ConnectionManager.SessionDelegate.session")
+                }
             }
         }
     }
@@ -413,14 +411,14 @@ actor ConnectionManager:
     }
 
 /* //////////////////////////////////////////////////////////////////////// */
-/* Browser */
+/* MARK: Browser */
 /* //////////////////////////////////////////////////////////////////////// */
 
     nonisolated func browser(
         _ browser: MCNearbyServiceBrowser,
         didNotStartBrowsingForPeers error: Error
     ) {
-        // TODO handle errors
+        // TODO: handle errors
     }
 
     nonisolated func browser(
@@ -441,7 +439,7 @@ actor ConnectionManager:
             print("FOUND PEER")
             print("\(peerID)")
             print("\(peerID.hashValue)")
-            print("\(info)")
+            print("\(String(describing: info))")
             print("")
 
             // Advertisement must be from an instance of this app
@@ -485,7 +483,7 @@ actor ConnectionManager:
     }
 
 /* //////////////////////////////////////////////////////////////////////// */
-/* Advertiser */
+/* MARK: Advertiser */
 /* //////////////////////////////////////////////////////////////////////// */
 
     nonisolated func advertiser(
@@ -535,10 +533,10 @@ actor ConnectionManager:
     }
 
 /* //////////////////////////////////////////////////////////////////////// */
-/* DVNodeSendDelegate */
+/* MARK: DVNodeSendDelegate */
 /* //////////////////////////////////////////////////////////////////////// */
 
-    private class DVNodeSendDelegate: SendDelegate {
+    private class DVNodeSendDelegate: SendDelegate, NeighborMessageSendDelegate {
         internal weak var owner: ConnectionManager?
         private let jsonEncoder: JSONEncoder = JSONEncoder()
 
@@ -571,10 +569,48 @@ actor ConnectionManager:
                 with: MCSessionSendDataMode.reliable
             )
         }
+
+        // TODO: These functions are kind of stupid
+        func send(toPeers peers: [MCPeerID], withMessages messages: [MessageWrapper], withReliability reliability: MCSessionSendDataMode) {
+            guard messages.count == peers.count else {
+                #if DEBUG
+                print("SendDelegate: Number of messages for multi-message send not equal to number of peers!")
+                #endif
+                return
+            }
+
+            for i in 0..<peers.count {
+                self.send(toPeers: [peers[i]], withMessage: messages[i], withReliability: reliability)
+            }
+        }
+        
+        func send(toPeers peers: [MCPeerID], withMessage message: MessageWrapper, withReliability reliability: MCSessionSendDataMode) {
+            // TODO: figure out the different sessions thing
+            Task {
+                for peer in peers {
+                    guard let session = await self.owner!.sessionsByPeer[peer] else {
+                        fatalError("SendDelegate: TRIED TO SEND TO PEER WITHOUT SESSION")
+                    }
+
+                    do {
+                        let dataOut = try message.serializedData()
+                        try session.send(
+                            dataOut,
+                            toPeers: [peer],
+                            with: reliability
+                        )
+                    } catch {
+                        #if DEBUG
+                        print("SendDelegate: Failed to send message to peers with error: \(error)")
+                        #endif
+                    }
+                }
+            }
+        }
     }
 
 /* //////////////////////////////////////////////////////////////////////// */
-/* NodeUpdateDelegate */
+/* MARK: NodeUpdateDelegate */
 /* //////////////////////////////////////////////////////////////////////// */
 
     private class NodeUpdateDelegate: AvailableNodesUpdateDelegate {
@@ -635,96 +671,4 @@ actor ConnectionManager:
         // Because this has to be isolated for one of the delegate callbacks
         self.previouslyConnectedPeers.insert(peerID)
     }
-
-    /// Synchronous because called from timer
-    nonisolated private func initiateLatencyTestHelper() {
-        // Make sure that `pingStartTimeNs` is valid for
-        // `kPingInterval / 2` seconds, then continue anyway with a new sequence
-        // number
-        _ = pingSemaphore.wait(timeout: DispatchTime(uptimeNanoseconds: UInt64(1_000_000_000 * kPingInterval / 2.0)))
-        Task {
-            await self.initiateLatencyTest()
-        }
-    }
-
-    private func initiateLatencyTest() async {
-        pingSeqNum += 1
-        expectedPingReplies = UInt(sessionsByPeer.count)
-        pingStartTimeNs = getCurrentTimeInNs()
-
-        let data = try! MessageWrapper.with {
-            $0.data = .measurementMessage(MeasurementMessage.with {
-                $0.initiatingPeerID = Int64(selfId.hashValue)
-                $0.sequenceNumber = pingSeqNum
-            })
-        }.serializedData()
-
-        await withTaskGroup(of: Void.self) { group in
-            for (neighborId, neighborSession) in sessionsByPeer {
-                guard neighborSession.connectedPeers.contains(where: { $0 == neighborId }) else {
-                    continue
-                }
-
-                group.addTask {
-                    do {
-                        try neighborSession.send(
-                            data,
-                            toPeers: [neighborId],
-                            with: .unreliable
-                        )
-                    } catch {
-                        print("Failed to ping \(neighborId) with error: \(error)")
-                    }
-                }
-            }
-
-            await group.waitForAll()
-        }
-    }
-
-    private func completeLatencyTest(
-        fromPeer: MCPeerID,
-        withSeqNum seqNum: UInt32,
-        withReplyDelay replyDelay: UInt64
-    ) async {
-        guard seqNum == pingSeqNum else {
-            // A message from a stray ping round shouldn't get past here
-            return
-        }
-
-        guard let currPingStartTimeNs = pingStartTimeNs else {
-            // received uninitiated latency message with correct sequence number
-            return
-        }
-
-        // Must be still connected to the peer to record latency
-        guard sessionsByPeer.contains(where: { $0.key == fromPeer }) else {
-            return
-        }
-
-        guard let model = connectionManagerModel else {
-            print("MODEL DEINITIALIZED")
-            return
-        }
-
-        let currLatency = Double(getCurrentTimeInNs() - currPingStartTimeNs - replyDelay) / 2.0
-
-        if let lastLatency = await model.estimatedLatencyByPeerInNs[fromPeer] {
-            Task { @MainActor in
-                model.estimatedLatencyByPeerInNs[fromPeer] =
-                    (kEWMAFactor * lastLatency) + ((1.0 - kEWMAFactor) * currLatency)
-            }
-        } else {
-            Task { @MainActor in
-                model.estimatedLatencyByPeerInNs[fromPeer] = currLatency
-            }
-        }
-
-        currPingReplies += 1
-        if currPingReplies == expectedPingReplies {
-            currPingReplies = 0
-            pingSemaphore.signal()
-        }
-    }
-
 }

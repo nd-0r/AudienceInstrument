@@ -11,7 +11,7 @@ import MultipeerConnectivity
 struct PeerConnectionStatusView: View {
     var status: MCSessionState
     var clientName: String
-    var clientLatencyInNs: Double?
+    var clientLatencyInNs: UInt64?
     var didSelectCallback: () -> Void
 
     var body: some View {
@@ -24,7 +24,7 @@ struct PeerConnectionStatusView: View {
                     .foregroundStyle(.blue)
                 Spacer()
                 if clientLatencyInNs != nil {
-                    Text("\(clientLatencyInNs! / 1_000_000.0)ms")
+                    Text("\(String(format: "%.2f", Double(clientLatencyInNs!) / 1_000_000.0))ms")
                     Spacer()
                 }
             }
