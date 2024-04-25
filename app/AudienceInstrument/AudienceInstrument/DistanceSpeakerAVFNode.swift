@@ -55,31 +55,11 @@ class DistanceSpeaker {
 
     var amp: Float {
         set {
-            if !self.alreadySetAmp && newValue > 0.0 && newValue <= 1.0 {
-                self.alreadySetAmp = true
+            if newValue > 0.0 && newValue <= 1.0 {
                 self._amp = newValue
             }
         }
         get { return self._amp }
-    }
-
-    var speaking: Bool {
-        set {
-            if newValue {
-                #if DEBUG
-                print("\(String(describing: Self.self)): Speaking true.")
-                #endif
-                self.samplesToSpeakScale = 1
-            } else {
-                #if DEBUG
-                print("\(String(describing: Self.self)): Speaking false.")
-                #endif
-                self.samplesToSpeakScale = 0
-            }
-        }
-        get {
-            return self.samplesToSpeakScale == 1
-        }
     }
 
     var done: Bool {
@@ -98,8 +78,9 @@ class DistanceSpeaker {
         AVAudioSourceNode { [self]
         _, _, frameCount, outputData -> OSStatus in
             let ablPointer = UnsafeMutableAudioBufferListPointer(outputData)
+            ablPointer.forEach({ abp in memset(abp.mData, 0, Int(abp.mDataByteSize)) })
 
-            let numFrames = self.samplesToSpeakScale * min(Int(frameCount), self.samplesToSpeak)
+            let numFrames = min(Int(frameCount), self.samplesToSpeak)
             for frameIdx in 0..<numFrames {
                 let index0 = Int(self.currWavetableIdx)
                 let index1 = index0 + 1
@@ -155,8 +136,6 @@ class DistanceSpeaker {
         return samplesPtr
     }()
 
-    private var samplesToSpeakScale: Int = 0
-    private var alreadySetAmp: Bool = false
     private var _amp: Float = 0.0
 
     private let timeToSpeak: TimeInterval

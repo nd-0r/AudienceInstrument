@@ -40,6 +40,8 @@ let kDiscoveryApp = "AudienceInstrument"
 
         let latencyNeighborApp = PingManager()
         let distanceNeighborApp = DistanceManagerNetworkModule()
+        distanceNeighborApp.speakerInitTimeout = .seconds(2)
+        distanceNeighborApp.speakerSpeakTimeout = .seconds(2)
 
         self.connectionManager = ConnectionManager(
             displayName: UIDevice.current.name,

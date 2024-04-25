@@ -40,7 +40,7 @@ protocol DistanceCalculatorProtocol{
     func deregisterPeer(peer: DistanceManager.PeerID) -> Void
     func speak(receivedAt: UInt64) throws -> UInt64
     func listen() throws -> Void
-    func heardPeerSpeak(peer: DistanceManager.PeerID, processingDelay: UInt64, reportedSpeakingDelay: UInt64) async throws -> Void
+    func heardPeerSpeak(peer: DistanceManager.PeerID, recvTimeInNS: UInt64, reportedSpeakingDelay: UInt64) async throws -> Void
     func calculateDistances() -> ([MCPeerID], [DistanceManager.DistInMeters])
     func reset() -> Void
 }
@@ -56,6 +56,10 @@ protocol DistanceManagerUpdateDelegate {
 }
 
 class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiver, DistanceManagerUpdateDelegate {
+    init() {
+        DistanceManager.registerUpdateDelegate(delegate: self)
+    }
+
     func addPeers(peers: [MCPeerID]) async {
         DistanceManager.addPeers(peers: peers)
     }
@@ -75,7 +79,13 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
     ) async throws {
         switch message.data {
         case .distanceProtocolMessage(let distanceProtocolWrapper):
-            try DistanceManager.receiveMessage(message: distanceProtocolWrapper, from: from, receivedAt: receivedAt)
+            try DistanceManager.receiveMessage(
+                message: distanceProtocolWrapper,
+                from: from,
+                receivedAt: receivedAt,
+                withInitTimeout: self.speakerInitTimeout,
+                withSpeakTimeout: self.speakerSpeakTimeout
+            )
         default:
             return
         }
@@ -91,6 +101,8 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
         }
     }
 
+    var speakerInitTimeout: DispatchTimeInterval = .seconds(2)
+    var speakerSpeakTimeout: DispatchTimeInterval = .seconds(2)
     var connectionManagerModel: ConnectionManagerModel? = nil
 }
 
@@ -269,14 +281,16 @@ struct DistanceManager  {
     public static func receiveMessage(
         message: DistanceProtocolWrapper,
         from: PeerID,
-        receivedAt: UInt64
+        receivedAt: UInt64,
+        withInitTimeout initTimeout: DispatchTimeInterval = .milliseconds(10),
+        withSpeakTimeout speakTimeout: DispatchTimeInterval = .milliseconds(10)
     ) throws {
         switch message.type {
         case .init_p(let initMessage):
             #if DEBUG
             print("\(String(describing: Self.self)): Received init message")
             #endif
-            Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from, withFreq: DistanceListener.Freq(initMessage.freq)) }
+            Self.dispatchQueue.async { Self.didReceiveInit(fromPeer: from, withFreq: DistanceListener.Freq(initMessage.freq), withTimeout: initTimeout) }
         case .initAck:
             #if DEBUG
             print("\(String(describing: Self.self)): Received init ack message")
@@ -286,7 +300,7 @@ struct DistanceManager  {
             #if DEBUG
             print("\(String(describing: Self.self)): Received speak message")
             #endif
-            Self.dispatchQueue.async { Self.didReceiveSpeak(from: from, receivedAt: receivedAt) }
+            Self.dispatchQueue.async { Self.didReceiveSpeak(from: from, receivedAt: receivedAt, withTimeout: speakTimeout) }
         case .spoke(let spoke):
             #if DEBUG
             print("\(String(describing: Self.self)): Received spOke message")
@@ -322,7 +336,7 @@ struct DistanceManager  {
     private static func scheduleTimeout(
         expectedStateByDeadline: Self.State,
         timeoutTargetState: Self.State?,
-        deadlineFromNow: DispatchTimeInterval = .seconds(5), // .milliseconds(10), // TODO use network latency // FIXME: don't do this
+        deadlineFromNow: DispatchTimeInterval = .milliseconds(10), // TODO use network latency
         actionOnUnreachedTarget: @escaping () -> Void = {}
     ) {
         let workItem = DispatchWorkItem {
@@ -344,7 +358,7 @@ struct DistanceManager  {
         )
     }
 
-    private static func didReceiveInit(fromPeer: PeerID, withFreq freq: DistanceListener.Freq) {
+    private static func didReceiveInit(fromPeer: PeerID, withFreq freq: DistanceListener.Freq, withTimeout timeout: DispatchTimeInterval) {
         switch Self.dmState {
         case .done:
             break
@@ -372,22 +386,23 @@ struct DistanceManager  {
         }
 
         switch dist {
-        case .someCalculated(let calculatedDist):
-            // Already calculated this distance: Resend it to the peer bc they must have missed the done message
-            Self.sendDelegate?.send(
-                toPeers: [fromPeer],
-                withMessage: MessageWrapper.with {
-                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
-                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
-                            $0.type = .done(Done.with {
-                                $0.distanceInM = calculatedDist
-                            })
-                        })
-                    })
-                },
-                withReliability: .reliable
-            )
-        case .noneCalculated:
+        default:
+//        case .someCalculated(let calculatedDist):
+//            // Already calculated this distance: Resend it to the peer bc they must have missed the done message
+//            Self.sendDelegate?.send(
+//                toPeers: [fromPeer],
+//                withMessage: MessageWrapper.with {
+//                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
+//                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+//                            $0.type = .done(Done.with {
+//                                $0.distanceInM = calculatedDist
+//                            })
+//                        })
+//                    })
+//                },
+//                withReliability: .reliable
+//            )
+//        case .noneCalculated:
             do {
                 try Self.distanceCalculator!.setupForMode(mode: .speaker(freq: freq))
             } catch {
@@ -413,6 +428,7 @@ struct DistanceManager  {
             Self.scheduleTimeout(
                 expectedStateByDeadline: .speaker(.spoke(.any)),
                 timeoutTargetState: .done,
+                deadlineFromNow: timeout,
                 actionOnUnreachedTarget: {
                     Self.resetToDone()
                 }
@@ -484,7 +500,7 @@ struct DistanceManager  {
         }
     }
 
-    private static func didReceiveSpeak(from: PeerID, receivedAt: UInt64) {
+    private static func didReceiveSpeak(from: PeerID, receivedAt: UInt64, withTimeout timeout: DispatchTimeInterval) {
         guard let actualSendDelegate = Self.sendDelegate else {
             fatalError("Received Speak with no send delegate registered: This should not be possible.")
         }
@@ -524,6 +540,7 @@ struct DistanceManager  {
             scheduleTimeout(
                 expectedStateByDeadline: .done,
                 timeoutTargetState: .done,
+                deadlineFromNow: timeout,
                 actionOnUnreachedTarget: {
                     Self.resetToDone()
                 }
@@ -561,14 +578,13 @@ struct DistanceManager  {
             print("ACCEPTED SPOKE FROM: \(from)") // TODO: remove
             #endif
 
-            let processingDelay = getCurrentTimeInNs() - receivedAt
             // FIXME: Until I convert this class to use new swift concurrency this is just how it's gonna be
             let wait = DispatchSemaphore(value: 0)
             Task {
                 do {
                     try await Self.distanceCalculator!.heardPeerSpeak(
                         peer: from,
-                        processingDelay: processingDelay,
+                        recvTimeInNS: receivedAt,
                         reportedSpeakingDelay: delayInNs
                     )
                 } catch {

@@ -101,7 +101,6 @@ fileprivate struct _DistanceCalculator {
         #if DEBUG
         print("\(typeName): Speaking")
         #endif
-        Self.speaker!.speaking = true
         Self.speaker!.amp = 1.0 // FIXME: This should be a constant somewhere
         let spokeAt = getCurrentTimeInNs()
         try Self.audioEngine.start()
@@ -120,16 +119,14 @@ fileprivate struct _DistanceCalculator {
     
     static func heardPeerSpeak(
         peer: DM.PeerID,
-        processingDelay: UInt64,
+        recvTimeInNS: UInt64,
         reportedSpeakingDelay: UInt64,
         withOneWayLatency oneWayLatency: UInt64
     ) {
         #if DEBUG
         print("\(typeName): Heard peer speak message")
         #endif
-        let callTime = getCurrentTimeInNs()
-        let adjustedSpokeTime = callTime - processingDelay - reportedSpeakingDelay
-        Self.estSpokeTimeByPeer[peer] = adjustedSpokeTime - oneWayLatency
+        Self.estSpokeTimeByPeer[peer] = recvTimeInNS - oneWayLatency - reportedSpeakingDelay
     }
     
     static func calculateDistances() -> ([DM.PeerID], [DM.DistInMeters]) {
@@ -196,6 +193,7 @@ fileprivate struct _DistanceCalculator {
         Self.estSpokeTimeByPeer.removeAll()
         Self.audioEngine.stop()
         Self.audioEngine.reset()
+        try! AVAudioSession.sharedInstance().setActive(false)
         Self.listener = nil
         Self.speaker = nil
         Self.state = nil
@@ -314,7 +312,7 @@ fileprivate struct _DistanceCalculator {
         hopSize: 16,
         minFreqListenHz: 6000,
         maxFreqListenHz: 8000,
-        scoreThresh: 0.2,
+        scoreThresh: 0.05,
         sdSilenceThresh: 0.01,
         toneLenToleranceTime: 0.01
     )
@@ -361,7 +359,7 @@ class DistanceCalculator: DistanceCalculatorProtocol {
     
     func heardPeerSpeak(
         peer: DM.PeerID,
-        processingDelay: UInt64,
+        recvTimeInNS recvTime: UInt64,
         reportedSpeakingDelay: UInt64
     ) async throws {
         guard let peerLatency = await self.peerLatencyCalculator.getOneWayLatencyInNS(toPeer: peer) else {
@@ -370,7 +368,7 @@ class DistanceCalculator: DistanceCalculatorProtocol {
 
         _DistanceCalculator.heardPeerSpeak(
             peer: peer,
-            processingDelay: processingDelay,
+            recvTimeInNS: recvTime,
             reportedSpeakingDelay: reportedSpeakingDelay,
             withOneWayLatency: peerLatency
         )

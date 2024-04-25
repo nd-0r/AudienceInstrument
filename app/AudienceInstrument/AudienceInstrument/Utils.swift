@@ -81,14 +81,17 @@ import MultipeerConnectivity
     return debugConnectionManagerModel
 }
 
+@inline(__always)
+func convertHostTimeToNanos(_ hostTime: UInt64) -> UInt64 {
+    var timeBaseInfo = mach_timebase_info_data_t()
+    mach_timebase_info(&timeBaseInfo)
+    return hostTime * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+}
 
 @inline(__always)
 func getCurrentTimeInNs() -> UInt64 {
-    var timeBaseInfo = mach_timebase_info_data_t()
-    mach_timebase_info(&timeBaseInfo)
     let timeUnits = mach_absolute_time()
-
-    return timeUnits * UInt64(timeBaseInfo.numer) / UInt64(timeBaseInfo.denom)
+    return convertHostTimeToNanos(timeUnits)
 }
 
 @inline(__always)

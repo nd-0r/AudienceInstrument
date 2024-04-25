@@ -11,6 +11,7 @@ Detect the onset of a tone with a high delta magnitude and dynamically
 set the threshold to the value it starts at?
  */
 
+import CoreAudio
 import Foundation
 import AVFoundation
 import Accelerate
@@ -155,10 +156,10 @@ class DistanceListener {
                 switch currBinSamples {
                 case .Detected(let startTime):
                     if let binAudioTime = AVAudioTime(
-                        sampleTime: AVAudioFramePosition(startTime),
+                        sampleTime: AVAudioFramePosition(actualAnchorTime.sampleTime + Int64(startTime)),
                         atRate: self.format.sampleRate
                     ).extrapolateTime(fromAnchor: actualAnchorTime) {
-                        binHostTime = binAudioTime.hostTime
+                        binHostTime = convertHostTimeToNanos(binAudioTime.hostTime)
                     }
                 default:
                     break
@@ -481,6 +482,7 @@ class DistanceListener {
             #if DEBUG
 //            print("Processing buffer")
 //            print("[\(String(describing: buf.baseAddress![0]))\((1..<self.constants.fftSize).map({ idx in String(describing: buf.baseAddress![idx])}).reduce("", { res, elem in res + ", " + elem}))]")
+            print(numSamplesFromStart) // FIXME: Remove
             #endif
             self.highpassFilter(&buf)
             self.applyWindow(&buf)

@@ -92,7 +92,6 @@
 		6BA467452BD7829C006CD075 /* PeerDistanceCalculationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerDistanceCalculationView.swift; sourceTree = "<group>"; };
 		6BAEE58C2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNodeTests.swift; sourceTree = "<group>"; };
 		6BAEE58E2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNodeTests.swift; sourceTree = "<group>"; };
-		6BD8F3AD2BD174AD002DB34A /* scratch.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = scratch.playground; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
 		6BF625DA2BD4FEF50029B7B9 /* test_3_tones_staggered.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_3_tones_staggered.wav; sourceTree = "<group>"; };
 		6BF625DB2BD4FEF50029B7B9 /* test_3_tones_separate.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_3_tones_separate.wav; sourceTree = "<group>"; };
 		6BF625DC2BD4FEF50029B7B9 /* test_3_tones_same_time.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_3_tones_same_time.wav; sourceTree = "<group>"; };
@@ -124,7 +123,6 @@
 		6B05ADF02BBE01C900E99323 /* AudienceInstrumentTests */ = {
 			isa = PBXGroup;
 			children = (
-				6BD8F3AD2BD174AD002DB34A /* scratch.playground */,
 				6BAEE5922BCE594300370F6C /* Resources */,
 				6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */,
 				6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */,
