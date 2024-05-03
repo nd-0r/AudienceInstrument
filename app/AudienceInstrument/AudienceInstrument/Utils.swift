@@ -110,3 +110,53 @@ func binarySearch(lowerBound: Int, upperBound: Int, tooLowPredicate tlp: (Int) -
 
     return lb
 }
+
+extension BluetoothService {
+    private static let kEWMAFactor: Double = 0.875
+
+    static func serializeLength(_ len: BluetoothService.LengthPrefixType, toBuffer buf: inout Data) {
+        withUnsafeBytes(of: len) { rawBufPtr in
+            #if DEBUG
+            assert(rawBufPtr.count == BluetoothService.lengthPrefixSize)
+            #endif
+            buf = Data(bytes: rawBufPtr.baseAddress!, count: rawBufPtr.count)
+        }
+    }
+
+    static func serializeMeasurementMessage(_ message: MeasurementMessage, toBuffer buf: inout Data) {
+        buf = try! message.serializedData()
+    }
+
+    static func serializeProtocolMessage(_ message: DistanceProtocolWrapper, toBuffer buf: inout Data) {
+        buf = try! message.serializedData()
+    }
+
+    static func deserializeLength(fromBuffer buf: Data) -> BluetoothService.LengthPrefixType {
+        var len: BluetoothService.LengthPrefixType = 0
+        withUnsafeMutablePointer(to: &len) { ptr in
+            buf.copyBytes(to: ptr, count: Int(BluetoothService.lengthPrefixSize))
+        }
+        return len
+    }
+
+    static func deserializeMeasurementMessage(fromBuffer buf: Data) -> MeasurementMessage {
+        return try! MeasurementMessage(serializedData: buf)
+    }
+
+    static func deserializeProtocolMessage(fromBuffer buf: Data) -> DistanceProtocolWrapper {
+        return try! DistanceProtocolWrapper(serializedData: buf)
+    }
+
+    // TODO: function can be optimized
+    static func calcLatency(
+        lastLatency: UInt64?,
+        lastPingRecvTimeInNS lastRecvTime: UInt64,
+        pingRecvTimeInNS recvTime: UInt64,
+        delayAtPeripheralInNS delay: UInt64
+    ) -> UInt64 {
+        let estOneWayLatency = ((recvTime - lastRecvTime) - delay)
+        return UInt64(
+            Self.kEWMAFactor * Double(lastLatency ?? estOneWayLatency)
+        ) + UInt64((1.0 - Self.kEWMAFactor) * Double(estOneWayLatency))
+    }
+}

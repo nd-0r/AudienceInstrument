@@ -51,24 +51,35 @@ protocol DistanceCalculatorProtocol: AnyObject {
 }
 
 // Goal is for DistanceManager to do nothing involving time
+protocol SpeakTimerDelegateUpdateDelegate: AnyObject {
+    func done() -> Void
+    func error(message: String) -> Void
+}
+
 protocol SpeakTimerDelegate {
     init(
         expectedNumPingRoundsPerPeripheral: UInt,
         expectedNumConnections: UInt,
         maxConnectionTries: UInt,
         distanceCalculator: any DistanceCalculatorProtocol,
-        connectedCallback: @escaping () -> Void,
-        doneCallback: @escaping () -> Void
+        updateDelegate: any SpeakTimerDelegateUpdateDelegate
     )
-    func sendSpeak()
+    func retrievePeripherals()
+}
+
+protocol SpokeDelegateUpdateDelegate: AnyObject {
+    func receivedSpeakMessage()
+    func error(message: String)
 }
 
 protocol SpokeDelegate {
     init(
         selfID: DistanceManager.PeerID,
         distanceCalculator: any DistanceCalculatorProtocol,
-        numPingRounds: UInt
+        numPingRounds: UInt,
+        updateDelegate: any SpokeDelegateUpdateDelegate
     )
+    func beginAdvertising()
 }
 
 enum DistanceManagerError: Error {
