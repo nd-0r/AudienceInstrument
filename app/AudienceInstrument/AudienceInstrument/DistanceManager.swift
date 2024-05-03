@@ -57,13 +57,14 @@ protocol SpeakTimerDelegateUpdateDelegate: AnyObject {
 }
 
 protocol SpeakTimerDelegate {
-    init(
+    init()
+    func registerDistanceCalculator(distanceCalculator: any DistanceCalculatorProtocol) -> Void
+    func registerUpdateDelegate(updateDelegate: any SpeakTimerDelegateUpdateDelegate) -> Void
+    func setup(
         expectedNumPingRoundsPerPeripheral: UInt,
         expectedNumConnections: UInt,
-        maxConnectionTries: UInt,
-        distanceCalculator: any DistanceCalculatorProtocol,
-        updateDelegate: any SpeakTimerDelegateUpdateDelegate
-    )
+        maxConnectionTries: UInt
+    ) -> Void
     func retrievePeripherals()
 }
 
@@ -73,13 +74,11 @@ protocol SpokeDelegateUpdateDelegate: AnyObject {
 }
 
 protocol SpokeDelegate {
-    init(
-        selfID: DistanceManager.PeerID,
-        distanceCalculator: any DistanceCalculatorProtocol,
-        numPingRounds: UInt,
-        updateDelegate: any SpokeDelegateUpdateDelegate
-    )
-    func beginAdvertising()
+    init(selfID: DistanceManager.PeerID)
+    func registerDistanceCalculator(distanceCalculator: any DistanceCalculatorProtocol)
+    func registerUpdateDelegate(updateDelegate: any SpokeDelegateUpdateDelegate)
+    func beginAdvertising(numPingRounds: UInt)
+    func resetProtocol()
 }
 
 enum DistanceManagerError: Error {
@@ -168,7 +167,13 @@ struct DistanceManager  {
         }
     }
 
-    public static func setup(distanceCalculator: any DistanceCalculatorProtocol) {
+    public static func setup(
+        speakTimerDelegate: (any SpeakTimerDelegate),
+        spokeDelegate: (any SpokeDelegate),
+        distanceCalculator: any DistanceCalculatorProtocol
+    ) {
+        Self.speakTimerDelegate = speakTimerDelegate
+        Self.spokeDelegate = spokeDelegate
         Self.distanceCalculator = distanceCalculator
     }
 
@@ -748,6 +753,8 @@ struct DistanceManager  {
     private static var sendDelegate: (any NeighborMessageSendDelegate)?
     private static var updateDelegate: (any DistanceManagerUpdateDelegate)?
     private static var distanceCalculator: (any DistanceCalculatorProtocol)?
+    private static var speakTimerDelegate: (any SpeakTimerDelegate)?
+    private static var spokeDelegate: (any SpokeDelegate)?
     private static var dmState = State.done
     // A custom serial queue
     private static var dispatchQueue = DispatchQueue(

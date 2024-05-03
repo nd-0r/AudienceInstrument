@@ -5,6 +5,16 @@
 //  Created by Andrew Orals on 4/28/24.
 //
 
+/**The starter code that this is based on is available [here](https://developer.apple.com/documentation/corebluetooth/transferring-data-between-bluetooth-low-energy-devices) and subject to the following license:
+Copyright © 2024 Apple Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+**/
+
 import Foundation
 import CoreBluetooth
 
@@ -25,7 +35,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     private var readBuffer: Data!
     private var state: State? = nil
 
-    private let numPingRounds: UInt
+    private var numPingRounds: UInt = 0
     private var pingRoundIdx: UInt32 = 0
     private var timeStartedSending: UInt64? = nil
     private var timeStartedReceiving: UInt64? = nil
@@ -38,18 +48,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     private var connectedCentral: CBCentral? = nil
 
     private weak var distanceCalculator: (any DistanceCalculatorProtocol)?
-    private weak var updateDelegate: (any SpokeDelegateUpdateDelegate)?
+    private weak var updateDelegate: (any SpokeDelegateUpdateDelegate)? = nil
 
     required init(
-        selfID: DistanceManager.PeerID,
-        distanceCalculator: any DistanceCalculatorProtocol,
-        numPingRounds: UInt,
-        updateDelegate: any SpokeDelegateUpdateDelegate
+        selfID: DistanceManager.PeerID
     ) {
         self.selfID = selfID
-        self.distanceCalculator = distanceCalculator
-        self.numPingRounds = numPingRounds
-        self.updateDelegate = updateDelegate
     }
 
     deinit {
@@ -58,13 +62,44 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
     }
 
-    func beginAdvertising() {
+    func registerDistanceCalculator(
+        distanceCalculator: any DistanceCalculatorProtocol
+    ) {
+        self.distanceCalculator = distanceCalculator
+    }
+
+    func registerUpdateDelegate(
+        updateDelegate: any SpokeDelegateUpdateDelegate
+    ) {
+        self.updateDelegate = updateDelegate
+    }
+
+    func beginAdvertising(
+        numPingRounds: UInt
+    ) {
+        self.numPingRounds = numPingRounds
+
         // All we advertise is our service's UUID.
         peripheralManager.startAdvertising(
             [CBAdvertisementDataServiceUUIDsKey: [BluetoothService.serviceUUID]]
         )
 
         self.state = .advertising
+    }
+
+    func resetProtocol() {
+        self.state = nil
+        self.transferCharacteristic = nil
+        self.connectedCentral = nil
+        self.readBuffer = Data()
+        self.sendBuffer = Data()
+        self.numPingRounds = 0
+        self.pingRoundIdx = 0
+        self.timeStartedSending = nil
+        self.timeStartedReceiving = nil
+        self.speakingDelay = nil
+        self.latency = nil
+        self.peripheralManager.stopAdvertising()
     }
 
     // MARK: - Helper Methods
@@ -79,16 +114,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             BluetoothService.LengthPrefixType(MemoryLayout<MeasurementMessage>.stride),
             toBuffer: &self.sendBuffer
         )
-    }
-
-    private func resetProtocol() {
-        self.state = nil
-        self.connectedCentral = nil
-        self.pingRoundIdx = 0
-        self.timeStartedSending = nil
-        self.timeStartedReceiving = nil
-        self.latency = nil
-        self.peripheralManager.stopAdvertising()
     }
 
     private func readAnyData(_ data: Data) {

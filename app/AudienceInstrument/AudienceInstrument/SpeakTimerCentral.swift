@@ -69,7 +69,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     weak var distanceCalculator: (any DistanceCalculatorProtocol)?
 
-    let expectedNumPingRoundsPerPeripheral: UInt
+    var expectedNumPingRoundsPerPeripheral: UInt = 0
 
     ///  `numConnected` refers to the number of peers to which the central manager has connected,
     ///  while `numStarted` refers to the number of peers the protocol has started with. `numConnected`
@@ -77,10 +77,10 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
     ///  of `numConnected`. __`numConnected` and `expectedNumConnections` tell when
     ///  to stop scanning for new peripherals, while `numStarted` and `numDone` tell when the
     ///  protocol has finished for all peripherals.
-    let expectedNumConnections: UInt
+    var expectedNumConnections: UInt = 0
     var numConnected: UInt = 0
 
-    let maxConnectionTries: UInt
+    var maxConnectionTries: UInt = 0
     var connectionTries: UInt = 0
 
     var numStarted: UInt = 0
@@ -88,26 +88,36 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     private weak var updateDelegate: (any SpeakTimerDelegateUpdateDelegate)?
 
-    required init(
+    required override init() {
+        self.centralManager = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBCentralManagerOptionShowPowerAlertKey: true]
+        )
+    }
+
+    deinit {
+        if centralManager.isScanning {
+            self.resetProtocol()
+        }
+    }
+
+    func registerDistanceCalculator(distanceCalculator: any DistanceCalculatorProtocol) {
+        self.distanceCalculator = distanceCalculator
+    }
+
+    func registerUpdateDelegate(updateDelegate: any SpeakTimerDelegateUpdateDelegate) {
+        self.updateDelegate = updateDelegate
+    }
+
+    func setup(
         expectedNumPingRoundsPerPeripheral: UInt,
         expectedNumConnections: UInt,
-        maxConnectionTries: UInt,
-        distanceCalculator: any DistanceCalculatorProtocol,
-        updateDelegate: any SpeakTimerDelegateUpdateDelegate
+        maxConnectionTries: UInt
     ) {
         self.expectedNumPingRoundsPerPeripheral = expectedNumPingRoundsPerPeripheral
         self.expectedNumConnections = expectedNumConnections
         self.maxConnectionTries = maxConnectionTries
-        self.distanceCalculator = distanceCalculator
-        self.updateDelegate = updateDelegate
-        self.centralManager = CBCentralManager(delegate: self, queue: nil, options: [CBCentralManagerOptionShowPowerAlertKey: true])
-    }
-
-    deinit {
-        self.centralManager.stopScan()
-        #if DEBUG
-        print("Scanning stopped")
-        #endif
     }
 
     /*
@@ -115,6 +125,12 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
      * Otherwise, scan for peripherals - specifically for our service's 128bit CBUUID
      */
     func retrievePeripherals() {
+        #if DEBUG
+        guard maxConnectionTries != 0 else {
+            fatalError("Must call `setup` before retrieving peripherals")
+        }
+        #endif
+
         let connectedPeripherals: [CBPeripheral] = (centralManager.retrieveConnectedPeripherals(withServices: [BluetoothService.serviceUUID]))
 
         guard !connectedPeripherals.isEmpty else {
@@ -139,6 +155,24 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             // TODO: maybe `CBConnectPeripheralOptionEnableAutoReconnect
             self.centralManager.connect(connectedPeripheral)
         }
+    }
+
+    func resetProtocol() {
+        self.centralManager.stopScan()
+        #if DEBUG
+        print("Scanning stopped")
+        #endif
+        self.latencyByPeer = [:]
+        self.discoveredPeripherals = []
+        self.discoveredPeripheralsState = [:]
+        self.transferCharacteristics = []
+        self.expectedNumPingRoundsPerPeripheral = 0
+        self.expectedNumConnections = 0
+        self.numConnected = 0
+        self.maxConnectionTries = 0
+        self.connectionTries = 0
+        self.numStarted = 0
+        self.numDone = 0
     }
 
     // MARK: - Helper Methods
