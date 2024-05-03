@@ -16,7 +16,8 @@ message NetworkMessage {
 message MeasurementMessage {
    uint32 sequenceNumber = 1;
    int64 initiatingPeerId = 2;
-   uint64 delayInNS = 3;
+   int64 toPeer = 3;
+   uint64 delayInNS = 4;
 }
 
 // MARK: Messenger
@@ -38,7 +39,8 @@ message InitAck { }
 message Speak { }
 
 message Spoke {
-   uint64 delayInNS = 1;
+   int64 from = 1;
+   uint64 delayInNS = 2;
 }
 
 message Done {
@@ -67,9 +69,8 @@ message MessageWrapper {
 
 message NeighborAppMessage {
    oneof data {
-      MeasurementMessage measurementMessage = 1;
       DistanceProtocolWrapper distanceProtocolMessage = 3;
-      // more later?
+      // more (or fewer:) later?
    }
 }
 

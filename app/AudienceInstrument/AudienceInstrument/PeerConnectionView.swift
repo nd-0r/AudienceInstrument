@@ -58,8 +58,10 @@ struct PeerConnectionView: View {
                 PeerConnectionStatusView(
                     status: connectionManagerModel.sessionPeers[mcPeerId]!,
                     clientName: mcPeerId.displayName,
-                    clientLatencyInNs: connectionManagerModel.estimatedLatencyByPeerInNs[mcPeerId],
-                    didSelectCallback: { connectionManagerModel.connect(toPeer: mcPeerId) }
+                    clientLatencyInNs: connectionManagerModel.estimatedLatencyByPeerInNs[Int64(mcPeerId.hashValue)],
+                    didSelectCallback: {
+                        connectionManagerModel.connect(toPeer: mcPeerId)
+                    }
                 )
             }
         }

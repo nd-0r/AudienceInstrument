@@ -7,15 +7,27 @@
 
 import Foundation
 import MultipeerConnectivity
+import CoreBluetooth
 
 let kServiceType = "andreworals-AIn"
 let kDiscoveryApp = "AudienceInstrument"
 
-@MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol, PingManagerUpdateDelegate {
+struct BluetoothService {
+    static let serviceUUID = CBUUID(string: "104F5F16-C192-4FD1-9892-EAB6E724DE39")
+    static let characteristicUUID = CBUUID(string: "7E5B9510-2372-4760-8F49-2C3EE56EFBBA")
+    typealias LengthPrefixType = UInt8
+    static let lengthPrefixSize = BluetoothService.LengthPrefixType(
+        MemoryLayout<LengthPrefixType>.stride
+    )
+    static let rssiDiscoveryThresh = -50
+}
+
+@MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
     @Published var sessionPeers: [MCPeerID : MCSessionState]
     @Published var allNodes: [ConnectionManager.PeerId : NodeMessageManager]
-    @Published var estimatedLatencyByPeerInNs: [MCPeerID : UInt64]
-    @Published var estimatedDistanceByPeerInM: [MCPeerID : DistanceManager.PeerDist]
+    @Published var estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64]
+    @Published var estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist]
+    @Published var sessionPeersByPeerID: [DistanceManager.PeerID:MCPeerID]
     private let connectionManager: ConnectionManager!
     @Published var ready: Bool = false
     private let debugUI: Bool
@@ -23,8 +35,8 @@ let kDiscoveryApp = "AudienceInstrument"
     init(
         sessionPeers: [MCPeerID : MCSessionState] = [:],
         allNodes: [ConnectionManager.PeerId : NodeMessageManager] = [:],
-        estimatedLatencyByPeerInNs: [MCPeerID : UInt64] = [:],
-        estimatedDistanceByPeerInM: [MCPeerID : DistanceManager.PeerDist] = [:],
+        estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64] = [:],
+        estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist] = [:],
         debugUI: Bool = false
     ) {
         self.sessionPeers = sessionPeers
@@ -32,31 +44,28 @@ let kDiscoveryApp = "AudienceInstrument"
         self.estimatedLatencyByPeerInNs = estimatedLatencyByPeerInNs
         self.estimatedDistanceByPeerInM = estimatedDistanceByPeerInM
 
+        for peer in sessionPeers.keys {
+            self.sessionPeersByPeerID[Int64(peer.hashValue)] = peer
+        }
+
         self.debugUI = debugUI
         guard debugUI == false else {
             connectionManager = nil
             return
         }
 
-        let latencyNeighborApp = PingManager()
         let distanceNeighborApp = DistanceManagerNetworkModule()
         distanceNeighborApp.speakerInitTimeout = .seconds(2)
         distanceNeighborApp.speakerSpeakTimeout = .seconds(2)
 
         self.connectionManager = ConnectionManager(
             displayName: UIDevice.current.name,
-            neighborApps: [latencyNeighborApp, distanceNeighborApp]
+            neighborApps: [distanceNeighborApp]
         )
 
-        let distanceCalculator = DistanceCalculator(
-            peerLatencyCalculator: latencyNeighborApp
-        )
-        DistanceManager.setup(distanceCalculator: distanceCalculator)
+        let distanceCalculator = DistanceCalculator()
 
-        Task {
-            await latencyNeighborApp.registerUpdateDelegate(delegate: self)
-            distanceNeighborApp.connectionManagerModel = self
-        }
+        distanceNeighborApp.connectionManagerModel = self
 
         Task { @MainActor in
             await connectionManager!.setConnectionManagerModel(newModel: self)
@@ -128,11 +137,16 @@ let kDiscoveryApp = "AudienceInstrument"
 // MARK: Distance functions
 
     // TODO: Make throwing
-    public func initiateDistanceCalculation(withNeighbors neighbors: [MCPeerID]) {
+    public func initiateDistanceCalculation(withNeighbors neighbors: [DistanceManager.PeerID]) {
         #if DEBUG
         print("Initiating distance calculation with neighbors: \(neighbors)")
         #endif
-        DistanceManager.initiate(retries: 2, withInitTimeout: .seconds(10), withSpokeTimeout: .seconds(10), toPeers: neighbors)
+        DistanceManager.initiate(
+            retries: 2,
+            withInitTimeout: .seconds(10),
+            withSpokeTimeout: .seconds(10),
+            toPeers: neighbors
+        )
     }
 
 // MARK: Messaging functions
@@ -149,7 +163,7 @@ let kDiscoveryApp = "AudienceInstrument"
         try await connectionManager?.send(toPeer: peerId, message: message, with: reliability)
     }
 
-    nonisolated func didUpdate(latenciesByPeer: [MCPeerID : UInt64]) {
+    nonisolated func didUpdate(latenciesByPeer: [DistanceManager.PeerID : UInt64]) {
         Task { @MainActor in
             self.estimatedLatencyByPeerInNs = latenciesByPeer
         }

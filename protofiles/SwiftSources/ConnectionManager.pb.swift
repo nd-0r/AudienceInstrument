@@ -55,6 +55,8 @@ struct MeasurementMessage {
 
   var initiatingPeerID: Int64 = 0
 
+  var toPeer: Int64 = 0
+
   var delayInNs: UInt64 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -114,6 +116,8 @@ struct Spoke {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  var from: Int64 = 0
 
   var delayInNs: UInt64 = 0
 
@@ -297,15 +301,7 @@ struct NeighborAppMessage {
 
   var data: NeighborAppMessage.OneOf_Data? = nil
 
-  var measurementMessage: MeasurementMessage {
-    get {
-      if case .measurementMessage(let v)? = data {return v}
-      return MeasurementMessage()
-    }
-    set {data = .measurementMessage(newValue)}
-  }
-
-  /// more later?
+  /// more (or fewer:) later?
   var distanceProtocolMessage: DistanceProtocolWrapper {
     get {
       if case .distanceProtocolMessage(let v)? = data {return v}
@@ -317,8 +313,7 @@ struct NeighborAppMessage {
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   enum OneOf_Data: Equatable {
-    case measurementMessage(MeasurementMessage)
-    /// more later?
+    /// more (or fewer:) later?
     case distanceProtocolMessage(DistanceProtocolWrapper)
 
   #if !swift(>=4.1)
@@ -327,15 +322,10 @@ struct NeighborAppMessage {
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.measurementMessage, .measurementMessage): return {
-        guard case .measurementMessage(let l) = lhs, case .measurementMessage(let r) = rhs else { preconditionFailure() }
-        return l == r
-      }()
       case (.distanceProtocolMessage, .distanceProtocolMessage): return {
         guard case .distanceProtocolMessage(let l) = lhs, case .distanceProtocolMessage(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
-      default: return false
       }
     }
   #endif
@@ -479,7 +469,8 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "sequenceNumber"),
     2: .same(proto: "initiatingPeerId"),
-    3: .same(proto: "delayInNS"),
+    3: .same(proto: "toPeer"),
+    4: .same(proto: "delayInNS"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -490,7 +481,8 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.sequenceNumber) }()
       case 2: try { try decoder.decodeSingularInt64Field(value: &self.initiatingPeerID) }()
-      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.toPeer) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
       default: break
       }
     }
@@ -503,8 +495,11 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if self.initiatingPeerID != 0 {
       try visitor.visitSingularInt64Field(value: self.initiatingPeerID, fieldNumber: 2)
     }
+    if self.toPeer != 0 {
+      try visitor.visitSingularInt64Field(value: self.toPeer, fieldNumber: 3)
+    }
     if self.delayInNs != 0 {
-      try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 3)
+      try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -512,6 +507,7 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   static func ==(lhs: MeasurementMessage, rhs: MeasurementMessage) -> Bool {
     if lhs.sequenceNumber != rhs.sequenceNumber {return false}
     if lhs.initiatingPeerID != rhs.initiatingPeerID {return false}
+    if lhs.toPeer != rhs.toPeer {return false}
     if lhs.delayInNs != rhs.delayInNs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -635,7 +631,8 @@ extension Speak: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
 extension Spoke: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "Spoke"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "delayInNS"),
+    1: .same(proto: "from"),
+    2: .same(proto: "delayInNS"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -644,20 +641,25 @@ extension Spoke: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.from) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.from != 0 {
+      try visitor.visitSingularInt64Field(value: self.from, fieldNumber: 1)
+    }
     if self.delayInNs != 0 {
-      try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 1)
+      try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Spoke, rhs: Spoke) -> Bool {
+    if lhs.from != rhs.from {return false}
     if lhs.delayInNs != rhs.delayInNs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -911,7 +913,6 @@ extension MessageWrapper: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 extension NeighborAppMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "NeighborAppMessage"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "measurementMessage"),
     3: .same(proto: "distanceProtocolMessage"),
   ]
 
@@ -921,19 +922,6 @@ extension NeighborAppMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try {
-        var v: MeasurementMessage?
-        var hadOneofValue = false
-        if let current = self.data {
-          hadOneofValue = true
-          if case .measurementMessage(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.data = .measurementMessage(v)
-        }
-      }()
       case 3: try {
         var v: DistanceProtocolWrapper?
         var hadOneofValue = false
@@ -957,17 +945,9 @@ extension NeighborAppMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    switch self.data {
-    case .measurementMessage?: try {
-      guard case .measurementMessage(let v)? = self.data else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    }()
-    case .distanceProtocolMessage?: try {
-      guard case .distanceProtocolMessage(let v)? = self.data else { preconditionFailure() }
+    try { if case .distanceProtocolMessage(let v)? = self.data {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    }()
-    case nil: break
-    }
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 

@@ -36,22 +36,22 @@ import MultipeerConnectivity
         Int64(n[5].hashValue):NodeMessageManager(peerId: Int64(n[5].hashValue))
     ]
 
-    let estimatedLatencyByPeerInNs: [MCPeerID:UInt64] = [
-        n[1]: 8_000_135,
-        n[2]: 5_047_300,
-        n[3]: 6_200_140,
-        n[5]: 11_000_930,
-        n[6]: 10_750_333
+    let estimatedLatencyByPeerInNs: [ConnectionManager.PeerId:UInt64] = [
+        Int64(n[1].hashValue): 8_000_135,
+        Int64(n[2].hashValue): 5_047_300,
+        Int64(n[3].hashValue): 6_200_140,
+        Int64(n[5].hashValue): 11_000_930,
+        Int64(n[6].hashValue): 10_750_333
     ]
 
-    let estimatedDistanceByPeerInM: [MCPeerID:DistanceManager.PeerDist] = [
-        n[0]: .noneCalculated,
-        n[1]: .someCalculated(4.21),
-        n[2]: .someCalculated(1.2),
-        n[3]: .someCalculated(6.13),
-        n[4]: .noneCalculated,
-        n[5]: .someCalculated(7.98),
-        n[6]: .someCalculated(0.333)
+    let estimatedDistanceByPeerInM: [ConnectionManager.PeerId:DistanceManager.PeerDist] = [
+        Int64(n[0].hashValue): .noneCalculated,
+        Int64(n[1].hashValue): .someCalculated(4.21),
+        Int64(n[2].hashValue): .someCalculated(1.2),
+        Int64(n[3].hashValue): .someCalculated(6.13),
+        Int64(n[4].hashValue): .noneCalculated,
+        Int64(n[5].hashValue): .someCalculated(7.98),
+        Int64(n[6].hashValue): .someCalculated(0.333)
     ]
 
     let debugConnectionManagerModel = ConnectionManagerModel(

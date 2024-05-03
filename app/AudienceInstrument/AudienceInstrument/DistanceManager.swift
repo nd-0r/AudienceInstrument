@@ -33,16 +33,42 @@ enum DistanceCalculatorMode: CustomStringConvertible, Equatable {
     case listener
 }
 
-protocol DistanceCalculatorProtocol{
+protocol DistanceCalculatorProtocol: AnyObject {
     func setupForMode(mode: DistanceCalculatorMode) throws
     func registerPeer(peer: DistanceManager.PeerID) -> Void
     func calcFreqsForPeers() -> [DistanceListener.Freq]?
     func deregisterPeer(peer: DistanceManager.PeerID) -> Void
     func speak(receivedAt: UInt64) throws -> UInt64
     func listen() throws -> Void
-    func heardPeerSpeak(peer: DistanceManager.PeerID, recvTimeInNS: UInt64, reportedSpeakingDelay: UInt64) async throws -> Void
-    func calculateDistances() -> ([MCPeerID], [DistanceManager.DistInMeters])
+    func heardPeerSpeak(
+        peer: DistanceManager.PeerID,
+        recvTimeInNS: UInt64,
+        reportedSpeakingDelay: UInt64,
+        withOneWayLatency: UInt64
+    ) throws -> Void
+    func calculateDistances() -> ([DistanceManager.PeerID], [DistanceManager.DistInMeters])
     func reset() -> Void
+}
+
+// Goal is for DistanceManager to do nothing involving time
+protocol SpeakTimerDelegate {
+    init(
+        expectedNumPingRoundsPerPeripheral: UInt,
+        expectedNumConnections: UInt,
+        maxConnectionTries: UInt,
+        distanceCalculator: any DistanceCalculatorProtocol,
+        connectedCallback: @escaping () -> Void,
+        doneCallback: @escaping () -> Void
+    )
+    func sendSpeak()
+}
+
+protocol SpokeDelegate {
+    init(
+        selfID: DistanceManager.PeerID,
+        distanceCalculator: any DistanceCalculatorProtocol,
+        numPingRounds: UInt
+    )
 }
 
 enum DistanceManagerError: Error {
@@ -52,7 +78,7 @@ enum DistanceManagerError: Error {
 }
 
 protocol DistanceManagerUpdateDelegate {
-    func didUpdate(distancesByPeer: [MCPeerID:DistanceManager.PeerDist])
+    func didUpdate(distancesByPeer: [DistanceManager.PeerID:DistanceManager.PeerDist])
 }
 
 class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiver, DistanceManagerUpdateDelegate {
@@ -60,21 +86,24 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
         DistanceManager.registerUpdateDelegate(delegate: self)
     }
 
-    func addPeers(peers: [MCPeerID]) async {
+    func addPeers(peers: [DistanceManager.PeerID]) async {
         DistanceManager.addPeers(peers: peers)
     }
 
-    func removePeers(peers: [MCPeerID]) async {
+    func removePeers(peers: [DistanceManager.PeerID]) async {
         DistanceManager.removePeers(peers: peers)
     }
     
-    func registerSendDelegate(delegate: any NeighborMessageSendDelegate, selfID _: MCPeerID) async {
+    func registerSendDelegate(
+        delegate: any NeighborMessageSendDelegate,
+        selfID _: DistanceManager.PeerID
+    ) async {
         DistanceManager.registerSendDelegate(delegate: delegate)
     }
 
     func receiveMessage(
         message: NeighborAppMessage,
-        from: MCPeerID,
+        from: DistanceManager.PeerID,
         receivedAt: UInt64
     ) async throws {
         switch message.data {
@@ -91,7 +120,7 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
         }
     }
 
-    func didUpdate(distancesByPeer: [MCPeerID : DistanceManager.PeerDist]) {
+    func didUpdate(distancesByPeer: [DistanceManager.PeerID : DistanceManager.PeerDist]) {
         guard self.connectionManagerModel != nil else {
             return
         }
@@ -108,7 +137,7 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
 
 /// NOT thread-safe
 struct DistanceManager  {
-    typealias PeerID = MCPeerID
+    typealias PeerID = Int64
     typealias DistInMeters = Float
 
     public enum PeerDist: Hashable {

@@ -329,12 +329,10 @@ fileprivate struct _DistanceCalculator {
 class DistanceCalculator: DistanceCalculatorProtocol {
     typealias DM = DistanceManager
 
+    init() {}
+
     func setupForMode(mode: DistanceCalculatorMode) throws {
         try _DistanceCalculator.setupForMode(mode: mode)
-    }
-
-    init(peerLatencyCalculator: any DistanceCalculatorLatencyDelegate) {
-        self.peerLatencyCalculator = peerLatencyCalculator
     }
 
     func calcFreqsForPeers() -> [DistanceListener.Freq]? {
@@ -360,12 +358,9 @@ class DistanceCalculator: DistanceCalculatorProtocol {
     func heardPeerSpeak(
         peer: DM.PeerID,
         recvTimeInNS recvTime: UInt64,
-        reportedSpeakingDelay: UInt64
-    ) async throws {
-        guard let peerLatency = await self.peerLatencyCalculator.getOneWayLatencyInNS(toPeer: peer) else {
-            throw DistanceCalculatorError.latencyError("No latency available for peer \(peer).")
-        }
-
+        reportedSpeakingDelay: UInt64,
+        withOneWayLatency peerLatency: UInt64
+    ) throws {
         _DistanceCalculator.heardPeerSpeak(
             peer: peer,
             recvTimeInNS: recvTime,
