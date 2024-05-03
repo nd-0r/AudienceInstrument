@@ -20,6 +20,8 @@ struct BluetoothService {
         MemoryLayout<LengthPrefixType>.stride
     )
     static let rssiDiscoveryThresh = -50
+    // TODO: update?
+    static let spokeTimeout: DispatchTimeInterval = .seconds(1)
 }
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
@@ -43,10 +45,11 @@ struct BluetoothService {
         self.allNodes = allNodes
         self.estimatedLatencyByPeerInNs = estimatedLatencyByPeerInNs
         self.estimatedDistanceByPeerInM = estimatedDistanceByPeerInM
-
-        for peer in sessionPeers.keys {
-            self.sessionPeersByPeerID[Int64(peer.hashValue)] = peer
-        }
+        self.sessionPeersByPeerID = Dictionary(
+            uniqueKeysWithValues: sessionPeers.map({
+                (k, _) in (Int64(k.hashValue), k)
+            })
+        )
 
         self.debugUI = debugUI
         guard debugUI == false else {
@@ -63,11 +66,25 @@ struct BluetoothService {
             neighborApps: [distanceNeighborApp]
         )
 
-        let distanceCalculator = DistanceCalculator()
-
         distanceNeighborApp.connectionManagerModel = self
 
         Task { @MainActor in
+            let speakTimerCentral = SpeakTimerCentral(
+                selfID: Int64(await connectionManager.selfId.hashValue)
+            )
+            let spokePeripheral = SpokePeripheral(
+                selfID: Int64(await connectionManager.selfId.hashValue)
+            )
+            let distanceCalculator = DistanceCalculator(
+                peerLatencyCalculator: nil
+            )
+
+            DistanceManager.setup(
+                speakTimerDelegate: speakTimerCentral,
+                spokeDelegate: spokePeripheral,
+                distanceCalculator: distanceCalculator
+            )
+
             await connectionManager!.setConnectionManagerModel(newModel: self)
             await connectionManager!.startAdvertising()
             ready = true

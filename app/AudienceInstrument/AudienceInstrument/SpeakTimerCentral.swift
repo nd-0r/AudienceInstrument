@@ -60,11 +60,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         var readBuffer: Data
     }
 
+    private let selfID: DistanceManager.PeerID
+
     var latencyByPeer: [Int64:UInt64] = [:]
 
     var centralManager: CBCentralManager!
-    var discoveredPeripherals: [CBPeripheral]
-    private var discoveredPeripheralsState: [CBPeripheral:PeripheralState]
+    var discoveredPeripherals: [CBPeripheral] = []
+    private var discoveredPeripheralsState: [CBPeripheral:PeripheralState] = [:]
     var transferCharacteristics: [CBCharacteristic]?
 
     weak var distanceCalculator: (any DistanceCalculatorProtocol)?
@@ -88,7 +90,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     private weak var updateDelegate: (any SpeakTimerDelegateUpdateDelegate)?
 
-    required override init() {
+    required init(selfID: DistanceManager.PeerID) {
+        self.selfID = selfID
+        super.init()
         self.centralManager = CBCentralManager(
             delegate: self,
             queue: nil,
@@ -545,7 +549,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             case .length:
                 if bytesWritten >= BluetoothService.lengthPrefixSize {
                     BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
-                        $0.type = .speak(Speak())
+                        $0.type = .speak(Speak.with {
+                            $0.from = self.selfID
+                        })
                     }, toBuffer: &peripheralState.sendBuffer)
                 
                     newState = .sendingSpeak(characteristic, .message, bytesWritten: 0)
@@ -617,6 +623,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         reportedSpeakingDelay: spokeMessage.spoke.delayInNs,
                         withOneWayLatency: peerLatency
                     )
+
+                    self.updateDelegate?.receivedSpokeMessage(from: spokeMessage.spoke.from)
 
                     newState = .discovered
 

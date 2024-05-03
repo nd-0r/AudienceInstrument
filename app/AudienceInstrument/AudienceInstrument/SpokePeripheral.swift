@@ -50,9 +50,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     private weak var distanceCalculator: (any DistanceCalculatorProtocol)?
     private weak var updateDelegate: (any SpokeDelegateUpdateDelegate)? = nil
 
-    required init(
-        selfID: DistanceManager.PeerID
-    ) {
+    required init(selfID: DistanceManager.PeerID) {
         self.selfID = selfID
     }
 
@@ -77,10 +75,14 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     func beginAdvertising(
         numPingRounds: UInt
     ) {
+        guard !self.peripheralManager.isAdvertising else {
+            return
+        }
+
         self.numPingRounds = numPingRounds
 
         // All we advertise is our service's UUID.
-        peripheralManager.startAdvertising(
+        self.peripheralManager.startAdvertising(
             [CBAdvertisementDataServiceUUIDsKey: [BluetoothService.serviceUUID]]
         )
 
@@ -376,8 +378,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         receivedAt: getCurrentTimeInNs()
                     )
 
-                    self.updateDelegate?.receivedSpeakMessage()
-
                     return true
                 } else {
                     newState = .receivingSpeak(.length, bytesToRead: bytesToRead)
@@ -385,9 +385,11 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                 }
             case .message:
                 if bytesToRead == 0 {
-                    let _ = BluetoothService.deserializeProtocolMessage(
+                    let message = BluetoothService.deserializeProtocolMessage(
                         fromBuffer: self.readBuffer
                     )
+
+                    self.updateDelegate?.receivedSpeakMessage(from: message.spoke.from)
 
                     newState = .sendingSpoke(.length, bytesWritten: 0)
 

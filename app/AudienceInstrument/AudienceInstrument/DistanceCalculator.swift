@@ -16,7 +16,7 @@ enum DistanceCalculatorError: Error {
 }
 
 protocol DistanceCalculatorLatencyDelegate {
-    func getOneWayLatencyInNS(toPeer: DistanceManager.PeerID) async -> UInt64?
+    func getOneWayLatencyInNS(toPeer: DistanceManager.PeerID) -> UInt64?
 }
 
 fileprivate struct _DistanceCalculator {
@@ -329,7 +329,9 @@ fileprivate struct _DistanceCalculator {
 class DistanceCalculator: DistanceCalculatorProtocol {
     typealias DM = DistanceManager
 
-    init() {}
+    init(peerLatencyCalculator: (any DistanceCalculatorLatencyDelegate)?) {
+        self.peerLatencyCalculator = peerLatencyCalculator
+    }
 
     func setupForMode(mode: DistanceCalculatorMode) throws {
         try _DistanceCalculator.setupForMode(mode: mode)
@@ -359,13 +361,24 @@ class DistanceCalculator: DistanceCalculatorProtocol {
         peer: DM.PeerID,
         recvTimeInNS recvTime: UInt64,
         reportedSpeakingDelay: UInt64,
-        withOneWayLatency peerLatency: UInt64
+        withOneWayLatency peerLatency: UInt64?
     ) throws {
+        #if DEBUG
+        if self.peerLatencyCalculator != nil && peerLatency == nil {
+            _DistanceCalculator.heardPeerSpeak(
+                peer: peer,
+                recvTimeInNS: recvTime,
+                reportedSpeakingDelay: reportedSpeakingDelay,
+                withOneWayLatency: peerLatencyCalculator!.getOneWayLatencyInNS(toPeer: peer)
+            )
+            return
+        }
+        #endif
         _DistanceCalculator.heardPeerSpeak(
             peer: peer,
             recvTimeInNS: recvTime,
             reportedSpeakingDelay: reportedSpeakingDelay,
-            withOneWayLatency: peerLatency
+            withOneWayLatency: peerLatency!
         )
     }
     
@@ -391,5 +404,5 @@ class DistanceCalculator: DistanceCalculatorProtocol {
 
     private var peerFrequencyCache: [DM.PeerID:UInt] = [:]
     private var peerFrequencyCalculator: (DM.PeerID) -> UInt = { _ in 37 }
-    private var peerLatencyCalculator: any DistanceCalculatorLatencyDelegate
+    private var peerLatencyCalculator: (any DistanceCalculatorLatencyDelegate)?
 }

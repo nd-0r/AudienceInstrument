@@ -36,7 +36,9 @@ message Init {
 
 message InitAck { }
 
-message Speak { }
+message Speak {
+   int64 from = 1;
+}
 
 message Spoke {
    int64 from = 1;
