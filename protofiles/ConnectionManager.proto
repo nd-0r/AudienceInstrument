@@ -3,28 +3,28 @@ syntax = "proto3";
 // MARK: Routing
 
 message ForwardingEntry {
-   int64 linkID = 1;
+   uint64 linkID = 1;
    uint64 cost = 2;
 }
 
 message NetworkMessage {
-   map<int64, ForwardingEntry> distanceVector = 1;
+   map<uint64, ForwardingEntry> distanceVector = 1;
 }
 
 // MARK: Measurement
 
 message MeasurementMessage {
    uint32 sequenceNumber = 1;
-   int64 initiatingPeerId = 2;
-   int64 toPeer = 3;
+   uint64 initiatingPeerId = 2;
+   uint64 toPeer = 3;
    uint64 delayInNS = 4;
 }
 
 // MARK: Messenger
 
 message MessengerMessage {
-   int64 from = 1;
-   int64 to = 2;
+   uint64 from = 1;
+   uint64 to = 2;
    string message = 3;
 }
 
@@ -37,11 +37,11 @@ message Init {
 message InitAck { }
 
 message Speak {
-   int64 from = 1;
+   uint64 from = 1;
 }
 
 message Spoke {
-   int64 from = 1;
+   uint64 from = 1;
    uint64 delayInNS = 2;
 }
 

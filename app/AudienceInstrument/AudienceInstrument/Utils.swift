@@ -28,30 +28,30 @@ import MultipeerConnectivity
     ]
 
     let allNodes = [
-        Int64(n[0].hashValue):NodeMessageManager(peerId: Int64(n[0].hashValue)),
-        Int64(n[1].hashValue):NodeMessageManager(peerId: Int64(n[1].hashValue)),
-        Int64(n[2].hashValue):NodeMessageManager(peerId: Int64(n[2].hashValue)),
-        Int64(n[3].hashValue):NodeMessageManager(peerId: Int64(n[3].hashValue)),
-        Int64(n[4].hashValue):NodeMessageManager(peerId: Int64(n[4].hashValue)),
-        Int64(n[5].hashValue):NodeMessageManager(peerId: Int64(n[5].hashValue))
+        n[0].id:NodeMessageManager(peerId: n[0].id),
+        n[1].id:NodeMessageManager(peerId: n[1].id),
+        n[2].id:NodeMessageManager(peerId: n[2].id),
+        n[3].id:NodeMessageManager(peerId: n[3].id),
+        n[4].id:NodeMessageManager(peerId: n[4].id),
+        n[5].id:NodeMessageManager(peerId: n[5].id)
     ]
 
     let estimatedLatencyByPeerInNs: [ConnectionManager.PeerId:UInt64] = [
-        Int64(n[1].hashValue): 8_000_135,
-        Int64(n[2].hashValue): 5_047_300,
-        Int64(n[3].hashValue): 6_200_140,
-        Int64(n[5].hashValue): 11_000_930,
-        Int64(n[6].hashValue): 10_750_333
+        n[1].id: 8_000_135,
+        n[2].id: 5_047_300,
+        n[3].id: 6_200_140,
+        n[5].id: 11_000_930,
+        n[6].id: 10_750_333
     ]
 
     let estimatedDistanceByPeerInM: [ConnectionManager.PeerId:DistanceManager.PeerDist] = [
-        Int64(n[0].hashValue): .noneCalculated,
-        Int64(n[1].hashValue): .someCalculated(4.21),
-        Int64(n[2].hashValue): .someCalculated(1.2),
-        Int64(n[3].hashValue): .someCalculated(6.13),
-        Int64(n[4].hashValue): .noneCalculated,
-        Int64(n[5].hashValue): .someCalculated(7.98),
-        Int64(n[6].hashValue): .someCalculated(0.333)
+        n[0].id: .noneCalculated,
+        n[1].id: .someCalculated(4.21),
+        n[2].id: .someCalculated(1.2),
+        n[3].id: .someCalculated(6.13),
+        n[4].id: .noneCalculated,
+        n[5].id: .someCalculated(7.98),
+        n[6].id: .someCalculated(0.333)
     ]
 
     let debugConnectionManagerModel = ConnectionManagerModel(
@@ -111,6 +111,14 @@ func binarySearch(lowerBound: Int, upperBound: Int, tooLowPredicate tlp: (Int) -
     return lb
 }
 
+@inline(__always)
+func generateRandom64BitInteger() -> UInt64 {
+    let upper32 = UInt64(arc4random_uniform(UInt32.max))
+    let lower32 = UInt64(arc4random_uniform(UInt32.max))
+
+    return (upper32 << 32) | lower32
+}
+
 extension BluetoothService {
     private static let kEWMAFactor: Double = 0.875
 
@@ -121,14 +129,23 @@ extension BluetoothService {
             #endif
             buf = Data(bytes: rawBufPtr.baseAddress!, count: rawBufPtr.count)
         }
+        #if DEBUG
+        print("\(#function): Serialized \(buf.count) bytes")
+        #endif
     }
 
     static func serializeMeasurementMessage(_ message: MeasurementMessage, toBuffer buf: inout Data) {
         buf = try! message.serializedData()
+        #if DEBUG
+        print("\(#function): Serialized \(buf.count) bytes")
+        #endif
     }
 
     static func serializeProtocolMessage(_ message: DistanceProtocolWrapper, toBuffer buf: inout Data) {
         buf = try! message.serializedData()
+        #if DEBUG
+        print("\(#function): Serialized \(buf.count) bytes")
+        #endif
     }
 
     static func deserializeLength(fromBuffer buf: Data) -> BluetoothService.LengthPrefixType {
@@ -136,14 +153,23 @@ extension BluetoothService {
         withUnsafeMutablePointer(to: &len) { ptr in
             buf.copyBytes(to: ptr, count: Int(BluetoothService.lengthPrefixSize))
         }
+        #if DEBUG
+        print("\(#function): Deserialized \(buf.count) bytes")
+        #endif
         return len
     }
 
     static func deserializeMeasurementMessage(fromBuffer buf: Data) -> MeasurementMessage {
+        #if DEBUG
+        print("\(#function): Deserialized \(buf.count) bytes")
+        #endif
         return try! MeasurementMessage(serializedData: buf)
     }
 
     static func deserializeProtocolMessage(fromBuffer buf: Data) -> DistanceProtocolWrapper {
+        #if DEBUG
+        print("\(#function): Deserialized \(buf.count) bytes")
+        #endif
         return try! DistanceProtocolWrapper(serializedData: buf)
     }
 
@@ -158,5 +184,42 @@ extension BluetoothService {
         return UInt64(
             Self.kEWMAFactor * Double(lastLatency ?? estOneWayLatency)
         ) + UInt64((1.0 - Self.kEWMAFactor) * Double(estOneWayLatency))
+    }
+}
+
+// Encode a 64-bit integer as a hexadecimal string
+func encodeToHex(_ value: UInt64) -> String {
+    let hexString = String(value, radix: 16, uppercase: true)
+    let paddingLength = max(16 - hexString.count, 0)
+    let paddedHexString = String(repeating: "0", count: paddingLength) + hexString
+    return paddedHexString
+}
+
+// Decode a hexadecimal string back to a 64-bit integer
+func decodeFromHex(_ hexString: String) -> UInt64? {
+    return UInt64(hexString, radix: 16)
+}
+
+/// `MCPeerID` offers no good way to get an integer ID. `MCPeerID`'s hash value is not stable
+/// over time, as `MCPeerID` is a reference type. So instead, the peer ID is generated and stored in
+/// the `displayName` of the `MCPeerID`. The `displayName` cannot have some special characters
+/// (probably something to do with Bonjour) so a 64-bit integer is encoded to a hexadecimal string.
+func generatePeerIDString() -> String {
+    return encodeToHex(generateRandom64BitInteger())
+}
+
+extension MCPeerID {
+    var id: UInt64 {
+        get {
+            #if DEBUG
+            assert(self.displayName.count == 16) // number of characters in a 64-bit hex string
+            #endif
+
+            guard let iDNumber = decodeFromHex(self.displayName) else {
+                fatalError("\(#function): Cannot decode displayName as base64 peerID")
+            }
+
+            return iDNumber
+        }
     }
 }

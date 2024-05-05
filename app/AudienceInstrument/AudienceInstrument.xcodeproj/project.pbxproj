@@ -79,6 +79,7 @@
 		6B05ADDE2BBDFE8D00E99323 /* AudienceInstrumentApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AudienceInstrumentApp.swift; sourceTree = "<group>"; };
 		6B05ADDF2BBDFE8D00E99323 /* MessageManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MessageManager.swift; sourceTree = "<group>"; };
 		6B05ADEF2BBE01C900E99323 /* AudienceInstrumentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AudienceInstrumentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B0F29E22BE7685400293A87 /* test.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = test.playground; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
 		6B1601402BC9B2E40008E11B /* DistanceCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceCalculator.swift; sourceTree = "<group>"; };
 		6B383EC82BCB1FC8006E8F42 /* DistanceListenerAVFNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceListenerAVFNode.swift; sourceTree = "<group>"; };
 		6B383ECA2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceSpeakerAVFNode.swift; sourceTree = "<group>"; };
@@ -125,6 +126,7 @@
 		6B05ADF02BBE01C900E99323 /* AudienceInstrumentTests */ = {
 			isa = PBXGroup;
 			children = (
+				6B0F29E22BE7685400293A87 /* test.playground */,
 				6BAEE5922BCE594300370F6C /* Resources */,
 				6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */,
 				6B9290622BC362D000159B9D /* AudienceInstrument.xctestplan */,

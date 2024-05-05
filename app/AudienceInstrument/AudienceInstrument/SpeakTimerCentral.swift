@@ -5,16 +5,6 @@
 //  Created by Andrew Orals on 4/28/24.
 //
 
-/**The starter code that this is based on is available [here](https://developer.apple.com/documentation/corebluetooth/transferring-data-between-bluetooth-low-energy-devices) and subject to the following license:
-Copyright © 2024 Apple Inc.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-**/
-
 import Foundation
 import CoreBluetooth
 
@@ -25,7 +15,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
 
         // TODO: instead of measuring receive <-> receive, measure receive <-> send
-        case discovered
+        case discovered(DistanceManager.PeerID)
+        case subscribed(CBCharacteristic)
         case receivingPing(
             CBCharacteristic?,
             LengthMessageState,
@@ -39,7 +30,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             bytesWritten: BluetoothService.LengthPrefixType,
             pingRoundIdx: UInt32,
             timeStartedReceivingCurrentPing: UInt64?,
-            initiatingPeerID: Int64
+            initiatingPeerID: DistanceManager.PeerID
         )
         case sendingSpeak(
             CBCharacteristic?,
@@ -62,7 +53,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     private let selfID: DistanceManager.PeerID
 
-    var latencyByPeer: [Int64:UInt64] = [:]
+    var reconnectablePeersOwned: [DistanceManager.PeerID] = []
+    var latencyByPeer: [DistanceManager.PeerID:UInt64] = [:]
 
     var centralManager: CBCentralManager!
     var discoveredPeripherals: [CBPeripheral] = []
@@ -73,31 +65,18 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     var expectedNumPingRoundsPerPeripheral: UInt = 0
 
-    ///  `numConnected` refers to the number of peers to which the central manager has connected,
-    ///  while `numStarted` refers to the number of peers the protocol has started with. `numConnected`
-    ///  will decrease as peers are cleaned up, while `numStarted` only increases up to the maximum
-    ///  of `numConnected`. __`numConnected` and `expectedNumConnections` tell when
-    ///  to stop scanning for new peripherals, while `numStarted` and `numDone` tell when the
-    ///  protocol has finished for all peripherals.
-    var expectedNumConnections: UInt = 0
-    var numConnected: UInt = 0
+    var expectedNumSubscriptions: UInt = 0
+    var numSubscribed: UInt = 0
+    var numDone: UInt = 0
 
     var maxConnectionTries: UInt = 0
     var connectionTries: UInt = 0
-
-    var numStarted: UInt = 0
-    var numDone: UInt = 0
 
     private weak var updateDelegate: (any SpeakTimerDelegateUpdateDelegate)?
 
     required init(selfID: DistanceManager.PeerID) {
         self.selfID = selfID
         super.init()
-        self.centralManager = CBCentralManager(
-            delegate: self,
-            queue: nil,
-            options: [CBCentralManagerOptionShowPowerAlertKey: true]
-        )
     }
 
     deinit {
@@ -119,17 +98,59 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         expectedNumConnections: UInt,
         maxConnectionTries: UInt
     ) {
-        self.expectedNumPingRoundsPerPeripheral = expectedNumPingRoundsPerPeripheral
-        self.expectedNumConnections = expectedNumConnections
-        self.maxConnectionTries = maxConnectionTries
+        if self.centralManager == nil {
+            self.centralManager = CBCentralManager(
+                delegate: self,
+                queue: nil,
+                options: [CBCentralManagerOptionShowPowerAlertKey: true]
+            )
+            self.expectedNumPingRoundsPerPeripheral = expectedNumPingRoundsPerPeripheral
+            self.expectedNumSubscriptions = expectedNumConnections
+            self.maxConnectionTries = maxConnectionTries
+        }
     }
 
+    func startProtocol() {
+        #if DEBUG
+        print("Starting protocol")
+        #endif
+
+        for peripheral in discoveredPeripherals {
+            self.startProtocolForPeripheral(peripheral)
+        }
+    }
+
+    func resetProtocol() {
+        if let actualCentralManager = self.centralManager {
+            actualCentralManager.stopScan()
+            #if DEBUG
+            print("Scanning stopped")
+            #endif
+        }
+        self.centralManager = nil
+        self.reconnectablePeersOwned.removeAll()
+        self.latencyByPeer = [:]
+        self.discoveredPeripherals = []
+        self.discoveredPeripheralsState = [:]
+        self.transferCharacteristics = []
+        self.expectedNumPingRoundsPerPeripheral = 0
+        self.expectedNumSubscriptions = 0
+        self.numSubscribed = 0
+        self.maxConnectionTries = 0
+        self.connectionTries = 0
+        self.numDone = 0
+    }
+
+// MARK: - Helper Functions
+
+    // MARK: - discovery phase: this is called from setup
     /*
      * We will first check if we are already connected to our counterpart
      * Otherwise, scan for peripherals - specifically for our service's 128bit CBUUID
      */
-    func retrievePeripherals() {
+    private func retrievePeripherals() {
         #if DEBUG
+        print("Retrieving peripherals")
         guard maxConnectionTries != 0 else {
             fatalError("Must call `setup` before retrieving peripherals")
         }
@@ -161,33 +182,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
     }
 
-    func resetProtocol() {
-        self.centralManager.stopScan()
-        #if DEBUG
-        print("Scanning stopped")
-        #endif
-        self.latencyByPeer = [:]
-        self.discoveredPeripherals = []
-        self.discoveredPeripheralsState = [:]
-        self.transferCharacteristics = []
-        self.expectedNumPingRoundsPerPeripheral = 0
-        self.expectedNumConnections = 0
-        self.numConnected = 0
-        self.maxConnectionTries = 0
-        self.connectionTries = 0
-        self.numStarted = 0
-        self.numDone = 0
-    }
 
-    // MARK: - Helper Methods
-
-    private func didDiscover(peripheral: CBPeripheral) {
+    private func didDiscover(peripheral: CBPeripheral, peerID: DistanceManager.PeerID) {
         // Device is in range - have we already seen it?
         if !self.discoveredPeripherals.contains(where: { $0 == peripheral }) {
             // Save a local copy of the peripheral, so CoreBluetooth doesn't get rid of it.
             self.discoveredPeripherals.append(peripheral)
             self.discoveredPeripheralsState[peripheral] = PeripheralState(
-                protocolState: .discovered,
+                protocolState: .discovered(peerID),
                 sendBuffer: Data(),
                 readBuffer: Data()
             )
@@ -200,26 +202,157 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
             // Stop scanning if out of tries
             if self.connectionTries >= self.maxConnectionTries {
-                self.centralManager.stopScan()
+                self.stopScanning()
+                self.updateDelegate?.error(message: "SpeakTimerCentral Ran out of connection tries")
                 #if DEBUG
-                print("Scanning stopped with \(self.numConnected) out of \(self.expectedNumConnections) connections")
+                print("Scanning stopped with \(self.numSubscribed) out of \(self.expectedNumSubscriptions) connections")
                 #endif
             }
         }
     }
 
-    private func didConnect(toPeripheral peripheral: CBPeripheral) {
-        self.numConnected += 1
-
-        // Stop scanning if reached expected number of peers
-        if self.numConnected >= self.expectedNumConnections {
+    private func stopScanning() {
+        if self.centralManager.isScanning {
             self.centralManager.stopScan()
             #if DEBUG
-            print("Scanning stopped with \(self.numConnected) out of \(self.expectedNumConnections) connections")
+            print("Scanning stopped with \(self.numSubscribed) out of \(self.expectedNumSubscriptions) connections")
+            #endif
+        }
+    }
+
+    // MARK: - connection phase: This happens automatically when discovering a peripheral
+    private func didConnect(peripheral: CBPeripheral) {
+        #if DEBUG
+        print("\(#function) called with \(String(describing: peripheral))")
+        #endif
+
+        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
+              case .discovered(_) = peripheralState.protocolState else {
+            fatalError("\(#function) called with peripheral not discovered yet.")
+        }
+
+        // Make sure we get the discovery callbacks
+        peripheral.delegate = self
+
+        // Search only for services that match our UUID
+        peripheral.discoverServices([BluetoothService.serviceUUID])
+    }
+
+    // MARK: - ready to subscribe: After the peripheral is connected, characteristics are discovered so that the client can start the protocol immediately
+    private func didDiscoverCharacteristic(
+        _ characteristic: CBCharacteristic,
+        forPeripheral peripheral: CBPeripheral
+    ) {
+        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
+              case .discovered(let peerID) = peripheralState.protocolState else {
+            #if DEBUG
+            fatalError("Tried to subscribe to peripheral not in connected state.")
+            #else
+            return
             #endif
         }
 
+        #if DEBUG
+        if self.updateDelegate == nil {
+            fatalError("Running \(#function) without an update delegate")
+        }
+        #endif
+
+        let connectContinuation: (Bool) -> Void = { shouldConnect in
+            if shouldConnect {
+                #if DEBUG
+                print("Allowed peripheral connection")
+                #endif
+
+                self.reconnectablePeersOwned.append(peerID)
+                // Ready to start protocol
+                self.discoveredPeripheralsState[peripheral] = PeripheralState(
+                    protocolState: .subscribed(characteristic),
+                    sendBuffer: peripheralState.sendBuffer,
+                    readBuffer: peripheralState.readBuffer
+                )
+            } else {
+                #if DEBUG
+                print("Denied peripheral connection")
+                #endif
+                self.removePeripheral(withPeripheral: peripheral)
+            }
+        }
+
+        if self.reconnectablePeersOwned.contains(peerID) {
+            connectContinuation(true)
+        } else {
+            self.updateDelegate!.shouldConnectToPeer(peer: peerID, completion: connectContinuation)
+        }
     }
+
+    // MARK: - subscribed: Called from client with `startProtocol` to start the protocol
+    private func startProtocolForPeripheral(
+        _ peripheral: CBPeripheral
+    ) {
+        #if DEBUG
+        print("Starting protocol for peripheral: \(String(describing: peripheral))")
+        #endif
+
+        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
+              case .subscribed(let characteristic) = peripheralState.protocolState else {
+            #if DEBUG
+            print("Tried to start protocol for peripheral not in connected state.")
+            #endif
+            return
+        }
+
+        self.subscribeToCharacteristic(atPeripheral: peripheral, characteristic)
+
+        self.stopScanning()
+        self.discoveredPeripheralsState[peripheral] = PeripheralState(
+            protocolState: .receivingPing(
+                characteristic,
+                .length,
+                bytesToRead: BluetoothService.LengthPrefixType(BluetoothService.lengthPrefixSize),
+                timeStartedReceivingLastPing: nil,
+                timeStartedReceivingCurrentPing: nil
+            ),
+            sendBuffer: Data(),
+            readBuffer: Data()
+        )
+
+        if let characteristicData = characteristic.value {
+            self.readAnyData(characteristicData, fromPeripheral: peripheral)
+        }
+    }
+
+    private func subscribeToCharacteristic(
+        atPeripheral peripheral: CBPeripheral,
+        _ characteristic: CBCharacteristic
+    ) {
+        // Subscribe
+        peripheral.setNotifyValue(true, for: characteristic)
+
+        // TODO: might need an ID associated with the session
+        self.numSubscribed += 1
+
+        // Stop scanning if reached expected number of peers
+        if self.numSubscribed >= self.expectedNumSubscriptions {
+            self.stopScanning()
+        }
+    }
+
+    // MARK: - Finish the protocol: Called from state machine
+    private func finishProtocolForPeripheral(_ peripheral: CBPeripheral) {
+        #if DEBUG
+        print("Finishing protocol for peripheral: \(String(describing: peripheral))")
+        #endif
+
+        self.numDone += 1
+        self.cleanup(discoveredPeripheral: peripheral)
+
+        if self.numDone >= self.numSubscribed {
+            self.updateDelegate?.done()
+        }
+    }
+
+// MARK: - read and write functions
 
     private func readAnyData(_ data: Data, fromPeripheral peripheral: CBPeripheral) {
         guard var peripheralState = self.discoveredPeripheralsState[peripheral] else {
@@ -228,6 +361,10 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             #endif
             return
         }
+
+        #if DEBUG
+        self.printState(forPeripheral: peripheral, "\(#function)")
+        #endif
 
         // only do something for receiving states
         let bytesToRead: BluetoothService.LengthPrefixType
@@ -261,11 +398,12 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
         let anotherReadRequired = (self.transitionStateForPeripheral(
             peripheral,
+            currPeripheralState: peripheralState,
             numBytesReadOrWritten: bytesToRead,
             opStartTime: timeStartedReceiving
         ) ?? false)
 
-        if anotherReadRequired {
+        if anotherReadRequired && Int(bytesToRead) < data.count {
             // TODO: make this a loop instead of recursion
             self.readAnyData(
                 data.suffix(from: Int(bytesToRead)),
@@ -282,9 +420,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             return
         }
 
+        #if DEBUG
+        self.printState(forPeripheral: peripheral, "\(#function)")
+        #endif
+
         // only do something for sending states
         let characteristic: CBCharacteristic?
-        var bytesWritten: BluetoothService.LengthPrefixType
+        let bufBytesWritten: BluetoothService.LengthPrefixType
 
         switch peripheralState.protocolState {
         case .sendingAck(
@@ -296,37 +438,40 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             initiatingPeerID: _
         ):
             characteristic = tmpCharacteristic
-            bytesWritten = tmpBytesWritten
+            bufBytesWritten = tmpBytesWritten
         case .sendingSpeak(
             let tmpCharacteristic,
             _,
             bytesWritten: let tmpBytesWritten
         ):
             characteristic = tmpCharacteristic
-            bytesWritten = tmpBytesWritten
+            bufBytesWritten = tmpBytesWritten
         default:
             return // Not in a state where writing is necessary
         }
 
-        // check to see if number of iterations completed and peripheral can accept more data
-        while bytesWritten < peripheralState.sendBuffer.count &&
+        // check to see if done writing bytes and peripheral can accept more data
+        var bytesWritten: Int = 0
+        let maxBytesToWrite = peripheralState.sendBuffer.count - Int(bufBytesWritten)
+        while bytesWritten < maxBytesToWrite &&
               peripheral.canSendWriteWithoutResponse {
             let mtu = peripheral.maximumWriteValueLength(for: .withoutResponse)
 
-            let data = peripheralState.sendBuffer.suffix(from: Int(bytesWritten))
+            let data = peripheralState.sendBuffer.suffix(from: Int(bufBytesWritten) + bytesWritten)
             var rawPacket = [UInt8]()
-            let numBytesToWrite = min(mtu, data.count)
+            let numBytesToWrite = min(mtu, maxBytesToWrite - bytesWritten)
 			data.copyBytes(to: &rawPacket, count: numBytesToWrite)
             let packetData = Data(bytes: &rawPacket, count: numBytesToWrite)
 
             peripheral.writeValue(packetData, for: characteristic!, type: .withoutResponse)
 
-            bytesWritten += BluetoothService.LengthPrefixType(numBytesToWrite)
+            bytesWritten += numBytesToWrite
         }
 
         let anotherWriteRequired = (self.transitionStateForPeripheral(
             peripheral,
-            numBytesReadOrWritten: bytesWritten,
+            currPeripheralState: peripheralState,
+            numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten),
             opStartTime: nil
         ) ?? false)
 
@@ -336,60 +481,30 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
     }
 
-    private func startProtocolForPeripheral(
-        _ peripheral: CBPeripheral,
-        _ characteristic: CBCharacteristic
-    ) {
-        self.numStarted += 1
-        self.discoveredPeripheralsState[peripheral] = PeripheralState(
-            protocolState: .receivingPing(
-                characteristic,
-                .length,
-                bytesToRead: BluetoothService.LengthPrefixType(BluetoothService.lengthPrefixSize),
-                timeStartedReceivingLastPing: nil,
-                timeStartedReceivingCurrentPing: nil
-            ),
-            sendBuffer: Data(),
-            readBuffer: Data()
-        )
-    }
-
-    private func finishProtocolForPeripheral(_ peripheral: CBPeripheral) {
-        self.numDone += 1
-        self.cleanup(discoveredPeripheral: peripheral)
-        self.discoveredPeripheralsState[peripheral] = PeripheralState(
-            protocolState: .discovered,
-            sendBuffer: Data(),
-            readBuffer: Data()
-        )
-
-        if self.numDone >= self.numStarted {
-            self.updateDelegate?.done()
-        }
-    }
+// MARK: - state machine
 
     // Returns true if action (read or write) needs to be repeated. Returns nil if done.
     // TODO: this is a huge function
     private func transitionStateForPeripheral(
         _ peripheral: CBPeripheral,
+        currPeripheralState: PeripheralState,
         numBytesReadOrWritten numBytes: BluetoothService.LengthPrefixType,
         opStartTime: UInt64?
     ) -> Bool? {
-        guard var peripheralState = self.discoveredPeripheralsState[peripheral] else {
-            return nil
-        }
-
+        var peripheralState = currPeripheralState
         var newState = peripheralState.protocolState
 
         defer {
+            #if DEBUG
+            print("Transitioning peripheral \(String(describing: peripheral)) from state \(String(describing: peripheralState.protocolState)) to state \(String(describing: newState))")
+            #endif
+
             peripheralState.protocolState = newState
             self.discoveredPeripheralsState[peripheral] = peripheralState
         }
 
         switch peripheralState.protocolState {
-        case .discovered:
-            // The only thing that can transition from this state is when the
-            //   characteristic is discovered
+        case .discovered, .subscribed(_):
             return nil
         case .receivingPing(
             let characteristic,
@@ -448,6 +563,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
                         initiatingPeerID: pingMessage.initiatingPeerID
                     )
+
+//                    self.writeAnyData(toPeripheral: peripheral)
 
                     return false
                 } else {
@@ -626,7 +743,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
                     self.updateDelegate?.receivedSpokeMessage(from: spokeMessage.spoke.from)
 
-                    newState = .discovered
+                    self.finishProtocolForPeripheral(peripheral)
 
                     return nil
                 } else {
@@ -640,16 +757,11 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     return true
                 }
             }
-        @unknown default:
-            #if DEBUG
-            print("You can't even keep track of the states in your own code. Sad.")
-            #endif
-            return nil
         }
     }
 
     private func calcLatencyForPeer(
-        peer: Int64,
+        peer: DistanceManager.PeerID,
         lastPingRecvTimeInNS lastRecvTime: UInt64?,
         pingRecvTimeInNS recvTime: UInt64,
         delayAtPeripheralInNS delay: UInt64
@@ -664,44 +776,88 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             pingRecvTimeInNS: recvTime,
             delayAtPeripheralInNS: delay
         )
+        #if DEBUG
+        print("Latency: \(Double(self.latencyByPeer[peer]!) / Double(NSEC_PER_MSEC))")
+        #endif
     }
 
-    /*
-     *  Call this when things either go wrong, or you're done with the connection.
-     *  This cancels any subscriptions if there are any, or straight disconnects if not.
-     *  (didUpdateNotificationStateForCharacteristic will cancel the connection if a subscription is involved)
-     */
-    private func cleanup(discoveredPeripheral: CBPeripheral) {
-        guard discoveredPeripheral.state == .connected else {
-            return
-        }
+// MARK: - cleanup functions
 
-        guard self.numConnected > 0 else {
+    private func removePeripheral(withPeripheral peripheral: CBPeripheral) {
+        peripheral.delegate = nil // TODO: maybe this is handled internally?
+        self.discoveredPeripheralsState[peripheral] = nil
+        self.discoveredPeripherals.removeAll(where: { $0 == peripheral })
+
+        switch peripheral.state {
+        case .connecting:
+            break
+        case .connected:
+            break
+        default:
             #if DEBUG
-            print("Tried to clean up more times than connected")
+            print("Tried to remove peripheral already disconnected or disconnecting")
             #endif
             return
         }
 
-        for service in (discoveredPeripheral.services ?? [] as [CBService]) {
+        for service in (peripheral.services ?? [] as [CBService]) {
             for characteristic in (service.characteristics ?? [] as [CBCharacteristic]) {
                 if characteristic.uuid == BluetoothService.characteristicUUID && characteristic.isNotifying {
                     // It is notifying, so unsubscribe
-                    discoveredPeripheral.setNotifyValue(false, for: characteristic)
+                    peripheral.setNotifyValue(false, for: characteristic)
                 }
             }
         }
         
         // If we've gotten this far, we're connected, but we're not subscribed, so we just disconnect
-        centralManager.cancelPeripheralConnection(discoveredPeripheral)
-        self.discoveredPeripheralsState[discoveredPeripheral] = PeripheralState(
-            protocolState: .discovered,
-            sendBuffer: Data(),
-            readBuffer: Data()
-        )
-        self.discoveredPeripherals.removeAll(where: { $0 == discoveredPeripheral })
-        self.numConnected -= 1
+        self.centralManager.cancelPeripheralConnection(peripheral)
     }
+
+    /*
+     * Use this to cancel a peripheral connection with a subscribed characteristic
+     */
+    private func cleanup(discoveredPeripheral: CBPeripheral) {
+        #if DEBUG
+        print("Cleaning up peripheral \(String(describing: discoveredPeripheral))")
+        #endif
+        guard let peripheralState = self.discoveredPeripheralsState[discoveredPeripheral] else {
+            #if DEBUG
+            print("Tried to clean up peripheral \(String(describing: discoveredPeripheral)) not connected")
+            #endif
+            return
+        }
+
+        switch peripheralState.protocolState {
+        case .discovered(_):
+            #if DEBUG
+            print("Tried to clean up peripheral \(String(describing: discoveredPeripheral)) not connected")
+            #endif
+            return
+        default:
+            break
+        }
+
+        guard self.numSubscribed > 0 else {
+            #if DEBUG
+            print("Tried to clean up more times than subscribed to characteristics")
+            #endif
+            return
+        }
+
+        self.numSubscribed -= 1
+        self.removePeripheral(withPeripheral: discoveredPeripheral)
+    }
+
+    #if DEBUG
+    private func printState(forPeripheral peripheral: CBPeripheral, _ message: String) {
+        guard let state = self.discoveredPeripheralsState[peripheral] else {
+            print("\(message) :: No state for peripheral \(String(describing: peripheral))")
+            return
+        }
+
+        print("\(message) :: \(String(describing: peripheral.name)) :: State: \(String(describing: state.protocolState)); Send Buffer: \(String(describing: state.sendBuffer)); Read Buffer: \(String(describing: state.readBuffer))")
+    }
+    #endif
 }
 
 extension SpeakTimerCentral: CBCentralManagerDelegate {
@@ -778,61 +934,96 @@ extension SpeakTimerCentral: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        
         // Reject if the signal strength is too low to attempt data transfer.
         // Change the minimum RSSI value depending on your app’s use case.
         guard RSSI.intValue >= BluetoothService.rssiDiscoveryThresh else {
                 #if DEBUG
-                print(String(format: "Discovered peripheral not in expected range, at %d", RSSI.intValue))
+                print(String(format: "Discovered peripheral %s not in expected range, at %d", String(describing: peripheral.name), RSSI.intValue))
                 #endif
                 return
         }
 
+        // Reject if the peripheral doesn't have our service
+        guard let servicesArray = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? Array<CBUUID>),
+              servicesArray.contains(BluetoothService.serviceUUID) else {
+            #if DEBUG
+            print("Discovered peripheral does not have this app's service")
+            #endif
+            return
+        }
+
         #if DEBUG
-        print(String(format: "Discovered %s at %d", String(describing: peripheral.name), RSSI.intValue))
+        print(String(format: "Discovered %s with our service at %d", String(describing: peripheral.name), RSSI.intValue))
         #endif
 
-        self.didDiscover(peripheral: peripheral)
+        guard let peerIDStr = advertisementData[CBAdvertisementDataLocalNameKey],
+              let peerIDData = Data(base64Encoded: (peerIDStr as! NSString) as String) else {
+            #if DEBUG
+            print("Failed to parse peerID from advertisement data for peripheral \(String(describing: peripheral)). Might be a signal not from this app.")
+            #endif
+            return
+        }
+
+        // Need to own the data because CBCentralManager might deallocate it apparently
+        var tmp = [UInt8](repeating: 0, count: 8)
+        peerIDData.copyBytes(to: &tmp, count: peerIDData.count)
+        let peerIDDataCopy = Data(bytes: tmp, count: peerIDData.count)
+        let peerID = peerIDDataCopy.withUnsafeBytes {
+            $0.load(as: DistanceManager.PeerID.self).bigEndian
+        }
+
+        #if DEBUG
+        print("Bluetooth discovered peer ID \(peerID) base64 encoded \(peerIDStr)")
+        #endif
+
+        self.didDiscover(peripheral: peripheral, peerID: peerID)
     }
 
     /*
      *  If the connection fails for whatever reason, we need to deal with it.
      */
-    nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+    func centralManager(
+        _ central: CBCentralManager,
+        didFailToConnect peripheral: CBPeripheral,
+        error: Error?
+    ) {
         #if DEBUG
         print("Failed to connect to \(peripheral): \(String(describing: error))")
         #endif
-        self.cleanup(discoveredPeripheral: peripheral)
+
+        self.removePeripheral(withPeripheral: peripheral)
     }
     
     /*
      *  We've connected to the peripheral, now we need to discover the services and characteristics to find the 'transfer' characteristic.
      */
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    func centralManager(
+        _ central: CBCentralManager,
+        didConnect peripheral: CBPeripheral
+    ) {
         #if DEBUG
         print("Peripheral Connected")
         #endif
 
-        // Make sure we get the discovery callbacks
-        peripheral.delegate = self
-
-        // Search only for services that match our UUID
-        peripheral.discoverServices([BluetoothService.serviceUUID])
-
-        self.didConnect(toPeripheral: peripheral)
+        self.didConnect(peripheral: peripheral)
     }
 
     /*
      *  Once the disconnection happens, we need to clean up our local copy of the peripheral
      */
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    func centralManager(
+        _ central: CBCentralManager,
+        didDisconnectPeripheral peripheral: CBPeripheral,
+        error: Error?
+    ) {
         #if DEBUG
         print("Perhiperal \(peripheral) disconnected")
         #endif
-        self.cleanup(discoveredPeripheral: peripheral)
-        
-        // Try retrieving peripherals again
-        self.retrievePeripherals()
+
+        self.removePeripheral(withPeripheral: peripheral)
+
+        // TODO: Maybe try retrieving peripherals again?
+        // self.retrievePeripherals()
     }
 
 }
@@ -843,8 +1034,12 @@ extension SpeakTimerCentral: CBPeripheralDelegate {
     /*
      *  The peripheral letting us know when services have been invalidated.
      */
-    func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
-        for service in invalidatedServices where service.uuid == BluetoothService.serviceUUID {
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didModifyServices invalidatedServices: [CBService]
+    ) {
+        for service in invalidatedServices
+        where service.uuid == BluetoothService.serviceUUID {
             #if DEBUG
             print("Transfer service is invalidated - rediscover services")
             #endif
@@ -856,18 +1051,24 @@ extension SpeakTimerCentral: CBPeripheralDelegate {
     /*
      *  The Transfer Service was discovered
      */
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didDiscoverServices error: Error?
+    ) {
         if let error = error {
             #if DEBUG
             print("Error discovering services: \(error.localizedDescription)")
             #endif
-            self.cleanup(discoveredPeripheral: peripheral)
+            self.removePeripheral(withPeripheral: peripheral)
             return
         }
 
         // Discover the characteristic we want...
         // Loop through the newly filled peripheral.services array, just in case there's more than one.
-        guard let peripheralServices = peripheral.services else { return }
+        guard let peripheralServices = peripheral.services else {
+            return
+        }
+
         for service in peripheralServices {
             peripheral.discoverCharacteristics([BluetoothService.characteristicUUID], for: service)
         }
@@ -877,39 +1078,53 @@ extension SpeakTimerCentral: CBPeripheralDelegate {
      *  The Transfer characteristic was discovered.
      *  Once this has been found, we want to subscribe to it, which lets the peripheral know we want the data it contains
      */
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didDiscoverCharacteristicsFor service: CBService,
+        error: Error?
+    ) {
+        #if DEBUG
+        print("Discovered characteristic for peripheral: \(String(describing: peripheral))")
+        #endif
+
         // Deal with errors (if any).
         if let error = error {
             #if DEBUG
             print("Error discovering characteristics: \(error.localizedDescription)")
             #endif
-            self.cleanup(discoveredPeripheral: peripheral)
+            self.removePeripheral(withPeripheral: peripheral)
             return
         }
 
-        guard let peripheralState = self.discoveredPeripheralsState[peripheral] else {
+        guard self.discoveredPeripheralsState[peripheral] != nil else {
             #if DEBUG
             // This implies that CB disagrees with self about whether the peer is discovered
-            print("\(#function): Could not find state for peripheral \(String(describing: peripheral)) with discovered characteristic")
-            #endif
+            fatalError("\(#function): Could not find state for peripheral \(String(describing: peripheral)) with discovered characteristic")
+            #else
             return
+            #endif
         }
 
         // Again, we loop through the array, just in case and check if it's the right one
-        guard let serviceCharacteristics = service.characteristics else { return }
-        for characteristic in serviceCharacteristics where characteristic.uuid == BluetoothService.characteristicUUID {
-            // If it is, subscribe to it and start the protocol
-            self.startProtocolForPeripheral(peripheral, characteristic)
-            peripheral.setNotifyValue(true, for: characteristic)
+        guard let serviceCharacteristics = service.characteristics else {
+            return
         }
-        
-        // Once this is complete, we just need to wait for the data to come in.
+
+        for characteristic in serviceCharacteristics
+        where characteristic.uuid == BluetoothService.characteristicUUID {
+            // If it is, update the peer's state
+            self.didDiscoverCharacteristic(characteristic, forPeripheral: peripheral)
+        }
     }
     
     /*
      *   This callback lets us know more data has arrived via notification on the characteristic
      */
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateValueFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
         // Deal with errors (if any)
         if let error = error {
             #if DEBUG
@@ -929,7 +1144,11 @@ extension SpeakTimerCentral: CBPeripheralDelegate {
     /*
      *  The peripheral letting us know whether our subscribe/unsubscribe happened or not
      */
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateNotificationStateFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
         // Deal with errors (if any)
         if let error = error {
             #if DEBUG

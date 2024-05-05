@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bluetooth is necessary to accurately calculate the latency between neighboring devices for calculating their distance.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Bonjour is necessary for discovering other local peers to build the mesh network.</string>
 	<key>NSMicrophoneUsageDescription</key>

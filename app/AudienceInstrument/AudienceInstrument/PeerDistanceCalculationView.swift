@@ -63,7 +63,7 @@ struct PeerDistanceCalculationView: View {
                     PeerDistanceStatusView(
                         status: connectionManagerModel.sessionPeers[mcPeerId]!,
                         clientName: mcPeerId.displayName,
-                        clientDistanceInM: estimatedDists[Int64(mcPeerId.hashValue)] ?? nil,
+                        clientDistanceInM: estimatedDists[mcPeerId.id] ?? nil,
                         didMarkCallback: {
                             if markedPeers.contains(mcPeerId) {
                                 markedPeers.remove(mcPeerId)
@@ -83,7 +83,7 @@ struct PeerDistanceCalculationView: View {
             Button {
                 connectionManagerModel.initiateDistanceCalculation(
                     withNeighbors: Array(
-                        markedPeers.map({ Int64($0.hashValue) })
+                        markedPeers.map({ $0.id })
                     )
                 )
             } label: {

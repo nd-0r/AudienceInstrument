@@ -52,6 +52,10 @@ protocol DistanceCalculatorProtocol: AnyObject {
 
 // Goal is for DistanceManager to do nothing involving time
 protocol SpeakTimerDelegateUpdateDelegate: AnyObject {
+    func shouldConnectToPeer(
+        peer: DistanceManager.PeerID,
+        completion: @escaping (Bool) -> Void
+    )
     func receivedSpokeMessage(from: DistanceManager.PeerID) -> Void
     func done() -> Void
     func error(message: String) -> Void
@@ -66,7 +70,8 @@ protocol SpeakTimerDelegate {
         expectedNumConnections: UInt,
         maxConnectionTries: UInt
     ) -> Void
-    func retrievePeripherals()
+    func startProtocol()
+    func resetProtocol()
 }
 
 protocol SpokeDelegateUpdateDelegate: AnyObject {
@@ -78,7 +83,7 @@ protocol SpokeDelegate {
     init(selfID: DistanceManager.PeerID)
     func registerDistanceCalculator(distanceCalculator: any DistanceCalculatorProtocol)
     func registerUpdateDelegate(updateDelegate: any SpokeDelegateUpdateDelegate)
-    func beginAdvertising(numPingRounds: UInt)
+    func startProtocol(numPingRounds: UInt)
     func resetProtocol()
 }
 
@@ -142,14 +147,15 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
         }
     }
 
-    var speakerInitTimeout: DispatchTimeInterval = .seconds(2)
-    var speakerSpeakTimeout: DispatchTimeInterval = .seconds(2)
+    var speakerInitTimeout: DispatchTimeInterval = .seconds(60)
+    // Speaker speak timeout is overridden by the bluetooth stuff
+    var speakerSpeakTimeout: DispatchTimeInterval = .seconds(60)
     var connectionManagerModel: ConnectionManagerModel? = nil
 }
 
 /// NOT thread-safe
 struct DistanceManager  {
-    typealias PeerID = Int64
+    typealias PeerID = UInt64
     typealias DistInMeters = Float
 
     public enum PeerDist: Hashable {
@@ -333,7 +339,11 @@ struct DistanceManager  {
                     timeoutTargetState: nil,
                     deadlineFromNow: withInitTimeout,
                     actionOnUnreachedTarget: {
-                        Self.initiate(retries: retries - 1, withInitTimeout: withInitTimeout)
+                        Self.initiate(
+                            retries: retries - 1,
+                            withInitTimeout: withInitTimeout,
+                            toPeers: peers
+                        )
                     }
                 )
             } else {
@@ -486,19 +496,24 @@ struct DistanceManager  {
             }
 
             // FIXME: Make this a constant somewhere
-            self.spokeDelegate?.beginAdvertising(numPingRounds: 16)
+            self.spokeDelegate?.startProtocol(numPingRounds: 16)
 
-            Self.sendDelegate?.send(
-                toPeers: [fromPeer],
-                withMessage: MessageWrapper.with {
-                    $0.data = .neighborAppMessage(NeighborAppMessage.with {
-                        $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
-                            $0.type = .initAck(InitAck())
+            #if DEBUG
+            if self.spokeDelegate == nil {
+                Self.sendDelegate?.send(
+                    toPeers: [fromPeer],
+                    withMessage: MessageWrapper.with {
+                        $0.data = .neighborAppMessage(NeighborAppMessage.with {
+                            $0.data = .distanceProtocolMessage(DistanceProtocolWrapper.with {
+                                $0.type = .initAck(InitAck())
+                            })
                         })
-                    })
-                },
-                withReliability: .reliable
-            )
+                    },
+                    withReliability: .reliable
+                )
+            }
+            #endif
+
             Self.dmState = .speaker(.initAcked(.certain(fromPeer)))
             Self.scheduleTimeout(
                 expectedStateByDeadline: .speaker(.spoke(.any)),
@@ -563,7 +578,7 @@ struct DistanceManager  {
                 }
                 #endif
 
-                Self.speakTimerDelegate?.retrievePeripherals()
+                Self.speakTimerDelegate?.startProtocol()
 
                 Self.dmState = .initiator(.speak(.certain(0)))
                 Self.scheduleTimeout(
@@ -670,10 +685,11 @@ struct DistanceManager  {
                 let wait = DispatchSemaphore(value: 0)
                 Task {
                     do {
-                        try await Self.distanceCalculator!.heardPeerSpeak(
+                        try Self.distanceCalculator!.heardPeerSpeak(
                             peer: from,
                             recvTimeInNS: receivedAt,
-                            reportedSpeakingDelay: delayInNs
+                            reportedSpeakingDelay: delayInNs,
+                            withOneWayLatency: 0
                         )
                     } catch {
                         #if DEBUG
@@ -731,6 +747,8 @@ struct DistanceManager  {
             }
             Self.peersInCurrentRound = []
         }
+        Self.speakTimerDelegate?.resetProtocol()
+        Self.spokeDelegate?.resetProtocol()
         Self.distanceCalculator?.reset()
         Self.initAckedPeers.removeAll()
         Self.dmState = .done
@@ -762,7 +780,6 @@ struct DistanceManager  {
     }
 
     // Called by initiator
-    @discardableResult
     private static func updateDistByPeer() {
         #if DEBUG
         print("DistanceManager:updateDistByPeer: Adding \(peersToAdd), Removing \(peersToRemove)")
@@ -833,9 +850,32 @@ struct DistanceManager  {
     private static let spokeDelegateUpdateDelegateClass = SpokeDelegateUpdateDelegateClass()
 
     private class SpeakTimerDelegateUpdateDelegateClass: SpeakTimerDelegateUpdateDelegate {
+        func shouldConnectToPeer(
+            peer: DistanceManager.PeerID,
+            completion: @escaping (Bool) -> Void
+        ) {
+            // Called from whatever the bluetooth queue is
+
+            // It's ok to access this from (possibly) another thread because
+            //   `peersInCurrentRound` is never written to during the protocol
+            if DistanceManager.peersInCurrentRound.contains(where: { $0 == peer }) {
+                completion(true)
+                DistanceManager.dispatchQueue.async {
+                    DistanceManager.didReceiveInitAck(from: peer)
+                }
+            } else {
+                #if DEBUG
+                print("Peer \(peer) denied with peers in current round \(String(describing: DistanceManager.peersInCurrentRound))")
+                #endif
+                completion(false)
+            }
+        }
+        
         func receivedSpokeMessage(from peer: DistanceManager.PeerID) {
             // zeros don't matter because `didReceiveSpoke` is using the delegate
-            DistanceManager.didReceiveSpoke(from: peer, receivedAt: 0, delayInNs: 0)
+            DistanceManager.dispatchQueue.async {
+                DistanceManager.didReceiveSpoke(from: peer, receivedAt: 0, delayInNs: 0)
+            }
         }
         
         func done() {
@@ -845,26 +885,34 @@ struct DistanceManager  {
         func error(message: String) {
             #if DEBUG
             fatalError("Something's wrong with the SpeakTimerDelegate: \(message)")
+            #else
+            DistanceManager.dispatchQueue.async {
+                DistanceManager.resetToDone()
+            }
             #endif
-            DistanceManager.resetToDone()
         }
     }
 
     private class SpokeDelegateUpdateDelegateClass: SpokeDelegateUpdateDelegate {
         func receivedSpeakMessage(from peer: DistanceManager.PeerID) {
             // zero doesn't matter because `didReceiveSpeak` is using the delegate
-            DistanceManager.didReceiveSpeak(
-                from: peer,
-                receivedAt: 0,
-                withTimeout: BluetoothService.spokeTimeout
-            )
+            DistanceManager.dispatchQueue.async {
+                DistanceManager.didReceiveSpeak(
+                    from: peer,
+                    receivedAt: 0,
+                    withTimeout: BluetoothService.spokeTimeout
+                )
+            }
         }
         
         func error(message: String) {
             #if DEBUG
             fatalError("Something's wrong with the SpokeDelegate: \(message)")
+            #else
+            DistanceManager.dispatchQueue.async {
+                DistanceManager.resetToDone()
+            }
             #endif
-            DistanceManager.resetToDone()
         }
     }
 

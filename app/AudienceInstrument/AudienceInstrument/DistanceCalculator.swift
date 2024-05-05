@@ -369,7 +369,7 @@ class DistanceCalculator: DistanceCalculatorProtocol {
                 peer: peer,
                 recvTimeInNS: recvTime,
                 reportedSpeakingDelay: reportedSpeakingDelay,
-                withOneWayLatency: peerLatencyCalculator!.getOneWayLatencyInNS(toPeer: peer)
+                withOneWayLatency: peerLatencyCalculator!.getOneWayLatencyInNS(toPeer: peer)!
             )
             return
         }

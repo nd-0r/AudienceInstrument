@@ -25,7 +25,7 @@ struct ForwardingEntry {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var linkID: Int64 = 0
+  var linkID: UInt64 = 0
 
   var cost: UInt64 = 0
 
@@ -39,7 +39,7 @@ struct NetworkMessage {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var distanceVector: Dictionary<Int64,ForwardingEntry> = [:]
+  var distanceVector: Dictionary<UInt64,ForwardingEntry> = [:]
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -53,9 +53,9 @@ struct MeasurementMessage {
 
   var sequenceNumber: UInt32 = 0
 
-  var initiatingPeerID: Int64 = 0
+  var initiatingPeerID: UInt64 = 0
 
-  var toPeer: Int64 = 0
+  var toPeer: UInt64 = 0
 
   var delayInNs: UInt64 = 0
 
@@ -69,9 +69,9 @@ struct MessengerMessage {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var from: Int64 = 0
+  var from: UInt64 = 0
 
-  var to: Int64 = 0
+  var to: UInt64 = 0
 
   var message: String = String()
 
@@ -107,7 +107,7 @@ struct Speak {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var from: Int64 = 0
+  var from: UInt64 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -119,7 +119,7 @@ struct Spoke {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var from: Int64 = 0
+  var from: UInt64 = 0
 
   var delayInNs: UInt64 = 0
 
@@ -409,7 +409,7 @@ extension ForwardingEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.linkID) }()
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.linkID) }()
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.cost) }()
       default: break
       }
@@ -418,7 +418,7 @@ extension ForwardingEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.linkID != 0 {
-      try visitor.visitSingularInt64Field(value: self.linkID, fieldNumber: 1)
+      try visitor.visitSingularUInt64Field(value: self.linkID, fieldNumber: 1)
     }
     if self.cost != 0 {
       try visitor.visitSingularUInt64Field(value: self.cost, fieldNumber: 2)
@@ -446,7 +446,7 @@ extension NetworkMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufInt64,ForwardingEntry>.self, value: &self.distanceVector) }()
+      case 1: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufUInt64,ForwardingEntry>.self, value: &self.distanceVector) }()
       default: break
       }
     }
@@ -454,7 +454,7 @@ extension NetworkMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if !self.distanceVector.isEmpty {
-      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufInt64,ForwardingEntry>.self, value: self.distanceVector, fieldNumber: 1)
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufUInt64,ForwardingEntry>.self, value: self.distanceVector, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -482,8 +482,8 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.sequenceNumber) }()
-      case 2: try { try decoder.decodeSingularInt64Field(value: &self.initiatingPeerID) }()
-      case 3: try { try decoder.decodeSingularInt64Field(value: &self.toPeer) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.initiatingPeerID) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.toPeer) }()
       case 4: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
       default: break
       }
@@ -495,10 +495,10 @@ extension MeasurementMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       try visitor.visitSingularUInt32Field(value: self.sequenceNumber, fieldNumber: 1)
     }
     if self.initiatingPeerID != 0 {
-      try visitor.visitSingularInt64Field(value: self.initiatingPeerID, fieldNumber: 2)
+      try visitor.visitSingularUInt64Field(value: self.initiatingPeerID, fieldNumber: 2)
     }
     if self.toPeer != 0 {
-      try visitor.visitSingularInt64Field(value: self.toPeer, fieldNumber: 3)
+      try visitor.visitSingularUInt64Field(value: self.toPeer, fieldNumber: 3)
     }
     if self.delayInNs != 0 {
       try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 4)
@@ -530,8 +530,8 @@ extension MessengerMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.from) }()
-      case 2: try { try decoder.decodeSingularInt64Field(value: &self.to) }()
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.from) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.to) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.message) }()
       default: break
       }
@@ -540,10 +540,10 @@ extension MessengerMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.from != 0 {
-      try visitor.visitSingularInt64Field(value: self.from, fieldNumber: 1)
+      try visitor.visitSingularUInt64Field(value: self.from, fieldNumber: 1)
     }
     if self.to != 0 {
-      try visitor.visitSingularInt64Field(value: self.to, fieldNumber: 2)
+      try visitor.visitSingularUInt64Field(value: self.to, fieldNumber: 2)
     }
     if !self.message.isEmpty {
       try visitor.visitSingularStringField(value: self.message, fieldNumber: 3)
@@ -623,7 +623,7 @@ extension Speak: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.from) }()
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.from) }()
       default: break
       }
     }
@@ -631,7 +631,7 @@ extension Speak: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.from != 0 {
-      try visitor.visitSingularInt64Field(value: self.from, fieldNumber: 1)
+      try visitor.visitSingularUInt64Field(value: self.from, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -656,7 +656,7 @@ extension Spoke: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.from) }()
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.from) }()
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.delayInNs) }()
       default: break
       }
@@ -665,7 +665,7 @@ extension Spoke: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     if self.from != 0 {
-      try visitor.visitSingularInt64Field(value: self.from, fieldNumber: 1)
+      try visitor.visitSingularUInt64Field(value: self.from, fieldNumber: 1)
     }
     if self.delayInNs != 0 {
       try visitor.visitSingularUInt64Field(value: self.delayInNs, fieldNumber: 2)

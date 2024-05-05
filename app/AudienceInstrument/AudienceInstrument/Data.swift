@@ -19,9 +19,9 @@ struct BluetoothService {
     static let lengthPrefixSize = BluetoothService.LengthPrefixType(
         MemoryLayout<LengthPrefixType>.stride
     )
-    static let rssiDiscoveryThresh = -50
+    static let rssiDiscoveryThresh = -80
     // TODO: update?
-    static let spokeTimeout: DispatchTimeInterval = .seconds(1)
+    static let spokeTimeout: DispatchTimeInterval = .seconds(60)
 }
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
@@ -47,7 +47,7 @@ struct BluetoothService {
         self.estimatedDistanceByPeerInM = estimatedDistanceByPeerInM
         self.sessionPeersByPeerID = Dictionary(
             uniqueKeysWithValues: sessionPeers.map({
-                (k, _) in (Int64(k.hashValue), k)
+                (k, _) in (k.id, k)
             })
         )
 
@@ -58,11 +58,11 @@ struct BluetoothService {
         }
 
         let distanceNeighborApp = DistanceManagerNetworkModule()
-        distanceNeighborApp.speakerInitTimeout = .seconds(2)
-        distanceNeighborApp.speakerSpeakTimeout = .seconds(2)
+
+        let randomIDString = generatePeerIDString()
 
         self.connectionManager = ConnectionManager(
-            displayName: UIDevice.current.name,
+            displayName: randomIDString,
             neighborApps: [distanceNeighborApp]
         )
 
@@ -70,10 +70,10 @@ struct BluetoothService {
 
         Task { @MainActor in
             let speakTimerCentral = SpeakTimerCentral(
-                selfID: Int64(await connectionManager.selfId.hashValue)
+                selfID: await connectionManager.selfId.id
             )
             let spokePeripheral = SpokePeripheral(
-                selfID: Int64(await connectionManager.selfId.hashValue)
+                selfID: await connectionManager.selfId.id
             )
             let distanceCalculator = DistanceCalculator(
                 peerLatencyCalculator: nil
@@ -158,10 +158,11 @@ struct BluetoothService {
         #if DEBUG
         print("Initiating distance calculation with neighbors: \(neighbors)")
         #endif
+        // currently `withSpokeTimeout` is overridden by the bluetooth stuff
         DistanceManager.initiate(
             retries: 2,
-            withInitTimeout: .seconds(10),
-            withSpokeTimeout: .seconds(10),
+            withInitTimeout: .seconds(60),
+            withSpokeTimeout: .seconds(60),
             toPeers: neighbors
         )
     }

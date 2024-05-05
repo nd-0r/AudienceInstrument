@@ -52,6 +52,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
     required init(selfID: DistanceManager.PeerID) {
         self.selfID = selfID
+        super.init()
     }
 
     deinit {
@@ -72,24 +73,25 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         self.updateDelegate = updateDelegate
     }
 
-    func beginAdvertising(
+    func startProtocol(
         numPingRounds: UInt
     ) {
-        guard !self.peripheralManager.isAdvertising else {
-            return
+        if self.peripheralManager == nil {
+            self.peripheralManager = CBPeripheralManager(
+                delegate: self,
+                queue: nil,
+                options: [CBPeripheralManagerOptionShowPowerAlertKey: true]
+            )
         }
 
         self.numPingRounds = numPingRounds
-
-        // All we advertise is our service's UUID.
-        self.peripheralManager.startAdvertising(
-            [CBAdvertisementDataServiceUUIDsKey: [BluetoothService.serviceUUID]]
-        )
-
-        self.state = .advertising
     }
 
     func resetProtocol() {
+        if let actualPeripheralManager = self.peripheralManager {
+            actualPeripheralManager.stopAdvertising()
+            actualPeripheralManager.removeAllServices()
+        }
         self.state = nil
         self.transferCharacteristic = nil
         self.connectedCentral = nil
@@ -101,16 +103,49 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         self.timeStartedReceiving = nil
         self.speakingDelay = nil
         self.latency = nil
-        self.peripheralManager.stopAdvertising()
     }
 
     // MARK: - Helper Methods
+    private func beginAdvertising() {
+        guard !self.peripheralManager.isAdvertising else {
+            return
+        }
+
+        /// Reference: https://developer.apple.com/documentation/corebluetooth/cbperipheralmanager/startadvertising(_:)
+        /// with base64 encoding, an 8-byte integer should fit in 12 bytes, because `4 * ceil(8 / 3)` is 12
+        /// Reference: https://stackoverflow.com/questions/13378815/base64-length-calculation
+        let base64EncodedSelfID = withUnsafeBytes(of: self.selfID.bigEndian) {
+            Data($0).base64EncodedString()
+        }
+
+        #if DEBUG
+        print("\(#function): Advertising ID \(self.selfID) with base64 encoding \(base64EncodedSelfID)")
+        #endif
+        self.peripheralManager.startAdvertising([
+            CBAdvertisementDataLocalNameKey: base64EncodedSelfID,
+            CBAdvertisementDataServiceUUIDsKey: [BluetoothService.serviceUUID]
+        ])
+
+        self.state = .advertising
+    }
 
     private func startProtocolWithCentral() {
+        guard let state = self.state,
+              case .advertising = state else {
+            #if DEBUG
+            fatalError("Tried to start protocol with central without starting advertising first")
+            #else
+            return
+            #endif
+        }
+
         self.state = .sendingPing(
             .length,
             bytesWritten: 0
         )
+
+        self.sendBuffer = Data()
+        self.readBuffer = Data()
 
         BluetoothService.serializeLength(
             BluetoothService.LengthPrefixType(MemoryLayout<MeasurementMessage>.stride),
@@ -125,6 +160,10 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             #endif
             return
         }
+
+        #if DEBUG
+        self.printState("\(#function)")
+        #endif
 
         // only do something for receiving states
         let bytesToRead: BluetoothService.LengthPrefixType
@@ -141,12 +180,21 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         ):
             bytesToRead = min(tmpBytesToRead, BluetoothService.LengthPrefixType(data.count))
         default:
+            #if DEBUG
+            print("Tried to read in non-reading state: \(String(describing: actualState))")
+            #endif
             return // Not in a state where writing is necessary
         }
 
         if bytesToRead > 0 {
             self.readBuffer.append(data.subdata(in: 0..<Int(bytesToRead)))
         }
+
+        #if DEBUG
+        if bytesToRead == 0 {
+            print("Called `readAnyData` with no bytes to read")
+        }
+        #endif
         
         let anotherReadRequired = (self.transitionState(
             numBytesReadOrWritten: bytesToRead
@@ -175,30 +223,46 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             return
         }
 
+        #if DEBUG
+        self.printState("\(#function)")
+        #endif
+
         // only do something for sending states
-        var bytesWritten: BluetoothService.LengthPrefixType
+        let bufBytesWritten: BluetoothService.LengthPrefixType
 
         switch actualState {
         case .sendingPing (
             _,
             bytesWritten: let tmpBytesWritten
         ):
-            bytesWritten = tmpBytesWritten
+            bufBytesWritten = tmpBytesWritten
         case .sendingSpoke(
             _,
             bytesWritten: let tmpBytesWritten
         ):
-            bytesWritten = tmpBytesWritten
+            bufBytesWritten = tmpBytesWritten
         default:
+            #if DEBUG
+            print("Tried to write in non-writing state: \(String(describing: actualState))")
+            #endif
             return // Not in a state where writing is necessary
         }
 
-        var didSend = true
-        while didSend && bytesWritten < self.sendBuffer.count {
-            let mtu = actualConnectedCentral.maximumUpdateValueLength
-            let numBytesToWrite = min(self.sendBuffer.count, mtu)
+        #if DEBUG
+        if self.sendBuffer.count == 0 {
+            print("Called `writeAnyData` with no bytes to write")
+        }
+        #endif
 
-            let data = self.sendBuffer.suffix(from: Int(bytesWritten))
+        // TODO: consolidate written bytes into one variable
+        var bytesWritten: Int = 0
+        let maxBytesToWrite = self.sendBuffer.count - Int(bufBytesWritten)
+        var didSend = true
+        while didSend && bytesWritten < maxBytesToWrite {
+            let mtu = actualConnectedCentral.maximumUpdateValueLength
+            let numBytesToWrite = min(maxBytesToWrite - bytesWritten, mtu)
+
+            let data = self.sendBuffer.suffix(from: Int(bufBytesWritten) + bytesWritten)
             var rawPacket = [UInt8]()
             data.copyBytes(to: &rawPacket, count: numBytesToWrite)
             let packetData = Data(bytes: &rawPacket, count: numBytesToWrite)
@@ -212,14 +276,21 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             
             // If it didn't work, drop out and wait for the callback
             guard didSend else {
+                #if DEBUG
+                print("Couldn't send: MTU \(mtu) bufBytesWritten \(bufBytesWritten) bytesWritten \(bytesWritten) maxBytesToWrite \(maxBytesToWrite)")
+                #endif
                 break
             }
 
-            bytesWritten += BluetoothService.LengthPrefixType(numBytesToWrite)
+            bytesWritten += numBytesToWrite
         }
 
+        #if DEBUG
+        print("\(#function): bytesWritten: \(bytesWritten)")
+        #endif
+
         let anotherWriteRequired = (self.transitionState(
-            numBytesReadOrWritten: bytesWritten
+            numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten)
         ) ?? false)
 
         if didSend && anotherWriteRequired {
@@ -236,13 +307,19 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
         var newState = actualState
 
+        #if DEBUG
+//        self.printState("\(#function) FROM")
+        #endif
+
         defer {
             self.state = newState
+            #if DEBUG
+//            self.printState("\(#function) TO")
+            #endif
         }
 
         switch actualState {
         case .advertising:
-            // FIXME: figure out what the initial state should be
             return nil
         case .sendingPing(let lengthMessageState, var bytesWritten):
             bytesWritten += numBytes
@@ -452,6 +529,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     }
 
     private func setupPeripheral() {
+        if self.state == nil {
+            // Make sure we start in a clean state
+            self.peripheralManager.removeAllServices()
+            self.peripheralManager.stopAdvertising()
+        }
+
         // Start with the CBMutableCharacteristic.
         let transferCharacteristic = CBMutableCharacteristic(
             type: BluetoothService.characteristicUUID,
@@ -471,6 +554,8 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         
         // Save the characteristic for later.
         self.transferCharacteristic = transferCharacteristic
+
+        self.beginAdvertising()
     }
 
     private func calcLatency(delay: UInt64) {
@@ -484,7 +569,16 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             pingRecvTimeInNS: self.timeStartedSending!,
             delayAtPeripheralInNS: delay
         )
+        #if DEBUG
+        print("Latency: \(Double(self.latency!) / Double(NSEC_PER_MSEC))")
+        #endif
     }
+
+    #if DEBUG
+    private func printState(_ message: String) {
+        print("\(message) :: State: \(String(describing: self.state)); Send Buffer: \(String(describing: self.sendBuffer)); Read Buffer: \(String(describing: self.readBuffer))")
+    }
+    #endif
 }
 
 extension SpokePeripheral: CBPeripheralManagerDelegate {
@@ -574,6 +668,7 @@ extension SpokePeripheral: CBPeripheralManagerDelegate {
 
         // save central
         self.connectedCentral = central
+        // TODO: experiment with this
         peripheral.setDesiredConnectionLatency(.low, for: central)
 
         // setup state
@@ -604,6 +699,9 @@ extension SpokePeripheral: CBPeripheralManagerDelegate {
      */
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
         // Start sending again
+        #if DEBUG
+        print("peripheral manager ready to update subscribers")
+        #endif
         self.writeAnyData()
     }
     
