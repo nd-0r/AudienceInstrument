@@ -25,12 +25,13 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
 
         case advertising
-        case sendingPing(LengthMessageState, bytesWritten: BluetoothService.LengthPrefixType)
+        case sendingPing(bytesWritten: BluetoothService.LengthPrefixType)
         case receivingAck(LengthMessageState, bytesToRead: BluetoothService.LengthPrefixType)
         case receivingSpeak(LengthMessageState, bytesToRead: BluetoothService.LengthPrefixType)
-        case sendingSpoke(LengthMessageState, bytesWritten: BluetoothService.LengthPrefixType)
+        case sendingSpoke(bytesWritten: BluetoothService.LengthPrefixType)
     }
 
+    private var tmpBuffer: Data = Data(repeating: 0, count: MemoryLayout<DistanceProtocolWrapper>.stride)
     private var sendBuffer: Data!
     private var readBuffer: Data!
     private var state: State? = nil
@@ -140,17 +141,13 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
 
         self.state = .sendingPing(
-            .length,
             bytesWritten: 0
         )
 
         self.sendBuffer = Data()
         self.readBuffer = Data()
 
-        BluetoothService.serializeLength(
-            BluetoothService.LengthPrefixType(MemoryLayout<MeasurementMessage>.stride),
-            toBuffer: &self.sendBuffer
-        )
+        self.serializePing()
     }
 
     private func readAnyData(_ data: Data) {
@@ -232,12 +229,10 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         switch actualState {
         case .sendingPing (
-            _,
             bytesWritten: let tmpBytesWritten
         ):
             bufBytesWritten = tmpBytesWritten
         case .sendingSpoke(
-            _,
             bytesWritten: let tmpBytesWritten
         ):
             bufBytesWritten = tmpBytesWritten
@@ -308,70 +303,36 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         var newState = actualState
 
         #if DEBUG
-//        self.printState("\(#function) FROM")
+        self.printState("\(#function) FROM")
         #endif
 
         defer {
             self.state = newState
             #if DEBUG
-//            self.printState("\(#function) TO")
+            self.printState("\(#function) TO")
             #endif
         }
 
         switch actualState {
         case .advertising:
             return nil
-        case .sendingPing(let lengthMessageState, var bytesWritten):
+        case .sendingPing(var bytesWritten):
             bytesWritten += numBytes
-            switch lengthMessageState {
-            case .length:
-                if bytesWritten >= BluetoothService.lengthPrefixSize {
-                    var delay: UInt64 = 0
-
-                    if let actualTimeStartedReceiving = self.timeStartedReceiving {
-                        delay = getCurrentTimeInNs() - actualTimeStartedReceiving
-                    }
-
-                    BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
-                        $0.sequenceNumber = self.pingRoundIdx
-                        $0.initiatingPeerID = self.selfID
-                        $0.delayInNs = delay
-                    }, toBuffer: &self.sendBuffer)
-
-                    newState = .sendingPing(
-                        .message,
-                        bytesWritten: 0
+            if bytesWritten >= self.sendBuffer.count {
+                newState = .receivingAck(
+                    .length,
+                    bytesToRead: BluetoothService.LengthPrefixType(
+                        MemoryLayout<DistanceProtocolWrapper>.stride
                     )
+                )
 
-                    self.timeStartedSending = getCurrentTimeInNs()
+                return false
+            } else {
+                newState = .sendingPing(
+                    bytesWritten: bytesWritten
+                )
 
-                    return true
-                } else {
-                    newState = .sendingPing(
-                        .length,
-                        bytesWritten: bytesWritten
-                    )
-
-                    return true
-                }
-            case .message:
-                if bytesWritten >= self.sendBuffer.count {
-                    newState = .receivingAck(
-                        .length,
-                        bytesToRead: BluetoothService.LengthPrefixType(
-                            MemoryLayout<DistanceProtocolWrapper>.stride
-                        )
-                    )
-
-                    return false
-                } else {
-                    newState = .sendingPing(
-                        .message,
-                        bytesWritten: bytesWritten
-                    )
-
-                    return true
-                }
+                return true
             }
         case .receivingAck(let lengthMessageState, var bytesToRead):
             bytesToRead -= numBytes
@@ -421,14 +382,10 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         return true
                     } else {
                         newState = .sendingPing(
-                            .length,
                             bytesWritten: 0
                         )
 
-                        BluetoothService.serializeLength(
-                            BluetoothService.LengthPrefixType(MemoryLayout<MeasurementMessage>.stride),
-                            toBuffer: &self.sendBuffer
-                        )
+                        self.serializePing()
 
                         return false
                     }
@@ -468,12 +425,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
                     self.updateDelegate?.receivedSpeakMessage(from: message.spoke.from)
 
-                    newState = .sendingSpoke(.length, bytesWritten: 0)
+                    newState = .sendingSpoke(bytesWritten: 0)
 
-                    BluetoothService.serializeLength(
-                        BluetoothService.LengthPrefixType(MemoryLayout<DistanceProtocolWrapper>.stride),
-                        toBuffer: &self.sendBuffer
-                    )
+                    self.serializeSpoke()
 
                     return false
                 } else {
@@ -485,47 +439,59 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     return true
                 }
             }
-        case .sendingSpoke(let lengthMessageState, var bytesWritten):
+        case .sendingSpoke(var bytesWritten):
             bytesWritten += numBytes
-            switch lengthMessageState {
-            case .length:
-                if bytesWritten >= BluetoothService.lengthPrefixSize {
-                    BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
-                        $0.type = .spoke(Spoke.with {
-                            $0.from = self.selfID
-                            $0.delayInNs = self.speakingDelay!
-                        })
-                    }, toBuffer: &self.sendBuffer)
+            if bytesWritten >= self.sendBuffer.count {
+                newState = .advertising
 
-                    newState = .sendingSpoke(
-                        .message,
-                        bytesWritten: 0
-                    )
+                return nil
+            } else {
+                newState = .sendingSpoke(
+                    bytesWritten: bytesWritten
+                )
 
-                    return true
-                } else {
-                    newState = .sendingSpoke(
-                        .length,
-                        bytesWritten: bytesWritten
-                    )
-
-                    return true
-                }
-            case .message:
-                if bytesWritten >= self.sendBuffer.count {
-                    newState = .advertising
-
-                    return nil
-                } else {
-                    newState = .sendingSpoke(
-                        .message,
-                        bytesWritten: bytesWritten
-                    )
-
-                    return true
-                }
+                return true
             }
         }
+    }
+
+    private func serializePing() {
+        var delay: UInt64 = 0
+
+        if let actualTimeStartedReceiving = self.timeStartedReceiving {
+            delay = getCurrentTimeInNs() - actualTimeStartedReceiving
+        }
+
+        BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
+            $0.sequenceNumber = self.pingRoundIdx
+            $0.initiatingPeerID = self.selfID
+            $0.delayInNs = delay
+        }, toBuffer: &self.tmpBuffer)
+
+        BluetoothService.serializeLength(
+            BluetoothService.LengthPrefixType(self.tmpBuffer.count),
+            toBuffer: &self.sendBuffer
+        )
+
+        self.timeStartedSending = getCurrentTimeInNs()
+
+        self.sendBuffer.append(self.tmpBuffer)
+    }
+
+    private func serializeSpoke() {
+        BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
+            $0.type = .spoke(Spoke.with {
+                $0.from = self.selfID
+                $0.delayInNs = self.speakingDelay!
+            })
+        }, toBuffer: &self.tmpBuffer)
+
+        BluetoothService.serializeLength(
+            BluetoothService.LengthPrefixType(MemoryLayout<DistanceProtocolWrapper>.stride),
+            toBuffer: &self.sendBuffer
+        )
+
+        self.sendBuffer.append(self.tmpBuffer)
     }
 
     private func setupPeripheral() {
@@ -536,9 +502,10 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
 
         // Start with the CBMutableCharacteristic.
+        // TODO: initialize the value to save a step and make things prettier
         let transferCharacteristic = CBMutableCharacteristic(
             type: BluetoothService.characteristicUUID,
-            properties: [.notify, .writeWithoutResponse],
+            properties: [.read, .write, .notify, .writeWithoutResponse],
             value: nil,
             permissions: [.readable, .writeable]
         )

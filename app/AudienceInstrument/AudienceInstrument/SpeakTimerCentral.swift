@@ -26,7 +26,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         )
         case sendingAck(
             CBCharacteristic?,
-            LengthMessageState,
             bytesWritten: BluetoothService.LengthPrefixType,
             pingRoundIdx: UInt32,
             timeStartedReceivingCurrentPing: UInt64?,
@@ -34,7 +33,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         )
         case sendingSpeak(
             CBCharacteristic?,
-            LengthMessageState,
             bytesWritten: BluetoothService.LengthPrefixType
         )
         case receivingSpoke(
@@ -49,6 +47,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         var protocolState: State
         var sendBuffer: Data
         var readBuffer: Data
+        var tmpBuffer: Data = Data(repeating: 0, count: MemoryLayout<DistanceProtocolWrapper>.stride)
     }
 
     private let selfID: DistanceManager.PeerID
@@ -318,7 +317,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         )
 
         if let characteristicData = characteristic.value {
-            self.readAnyData(characteristicData, fromPeripheral: peripheral)
+            self.readAnyData(characteristicData.subdata(in: 0..<characteristicData.count), fromPeripheral: peripheral)
         }
     }
 
@@ -392,6 +391,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             return // Not in a state where writing is necessary
         }
 
+        guard Int(bytesToRead) <= data.count else {
+            #if DEBUG
+            print("\(#function): Waiting for another notification because not enough data in buffer. Buffer size: \(data.count)")
+            #endif
+            return
+        }
+
         if bytesToRead > 0 {
             peripheralState.readBuffer.append(data.subdata(in: 0..<Int(bytesToRead)))
         }
@@ -403,7 +409,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             opStartTime: timeStartedReceiving
         ) ?? false)
 
-        if anotherReadRequired && Int(bytesToRead) < data.count {
+        if anotherReadRequired {
             // TODO: make this a loop instead of recursion
             self.readAnyData(
                 data.suffix(from: Int(bytesToRead)),
@@ -431,7 +437,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         switch peripheralState.protocolState {
         case .sendingAck(
             let tmpCharacteristic,
-            _,
             bytesWritten: let tmpBytesWritten,
             pingRoundIdx: _,
             timeStartedReceivingCurrentPing: _,
@@ -441,7 +446,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             bufBytesWritten = tmpBytesWritten
         case .sendingSpeak(
             let tmpCharacteristic,
-            _,
             bytesWritten: let tmpBytesWritten
         ):
             characteristic = tmpCharacteristic
@@ -550,14 +554,16 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         delayAtPeripheralInNS: pingMessage.delayInNs
                     )
 
-                    BluetoothService.serializeLength(
-                        BluetoothService.LengthPrefixType(MemoryLayout<MeasurementMessage>.stride),
-                        toBuffer: &peripheralState.sendBuffer
+                    self.serializeAck(
+                        pingRoundIdx: pingMessage.sequenceNumber,
+                        initiatingPeerID: pingMessage.initiatingPeerID,
+                        timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing!,
+                        sendBuffer: &peripheralState.sendBuffer,
+                        tmpBuffer: &peripheralState.tmpBuffer
                     )
 
                     newState = .sendingAck(
                         characteristic,
-                        .length,
                         bytesWritten: 0,
                         pingRoundIdx: pingMessage.sequenceNumber,
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
@@ -581,119 +587,65 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             }
         case .sendingAck(
             let characteristic,
-            let lengthMessageState,
             bytesWritten: var bytesWritten,
             pingRoundIdx: var pingRoundIdx,
             timeStartedReceivingCurrentPing: let timeStartedReceivingCurrentPing,
             initiatingPeerID: let initiatingPeerID
         ):
             bytesWritten += numBytes
-            switch lengthMessageState {
-            case .length:
-                if bytesWritten >= BluetoothService.lengthPrefixSize {
-                    BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
-                        $0.sequenceNumber = pingRoundIdx
-                        $0.initiatingPeerID = initiatingPeerID
-                        $0.delayInNs = getCurrentTimeInNs() - timeStartedReceivingCurrentPing!
-                    }, toBuffer: &peripheralState.sendBuffer)
+            if bytesWritten >= peripheralState.sendBuffer.count {
+                // Finished a round of ping-ack
+                pingRoundIdx += 1
+                if pingRoundIdx >= self.expectedNumPingRoundsPerPeripheral {
+                    // transition to speaking
+                    // TODO: maybe handle error
+                    try! self.distanceCalculator?.listen()
 
-                    newState = .sendingAck(
-                        characteristic,
-                        .message,
-                        bytesWritten: 0,
-                        pingRoundIdx: pingRoundIdx,
-                        timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
-                        initiatingPeerID: initiatingPeerID
+                    self.serializeSpeak(
+                        sendBuffer: &peripheralState.sendBuffer,
+                        tmpBuffer: &peripheralState.tmpBuffer
                     )
+
+                    newState = .sendingSpeak(characteristic, bytesWritten: 0)
 
                     return true
                 } else {
-                    newState = .sendingAck(
-                        characteristic,
-                        .length,
-                        bytesWritten: bytesWritten,
-                        pingRoundIdx: pingRoundIdx,
-                        timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
-                        initiatingPeerID: initiatingPeerID
-                    )
-
-                    return true
-                }
-            case .message:
-                if bytesWritten >= peripheralState.sendBuffer.count {
-                    // Finished a round of ping-ack
-                    pingRoundIdx += 1
-                    if pingRoundIdx >= self.expectedNumPingRoundsPerPeripheral {
-                        // transition to speaking
-                        // TODO: maybe handle error
-                        try! self.distanceCalculator?.listen()
-
-                        BluetoothService.serializeLength(
-                            BluetoothService.LengthPrefixType(MemoryLayout<DistanceProtocolWrapper>.stride),
-                            toBuffer: &peripheralState.sendBuffer
-                        )
-
-                        newState = .sendingSpeak(characteristic, .length, bytesWritten: 0)
-
-                        return true
-                    } else {
-                        newState = .receivingPing(
-                            characteristic,
-                            .length,
-                            bytesToRead: BluetoothService.lengthPrefixSize,
-                            timeStartedReceivingLastPing: timeStartedReceivingCurrentPing,
-                            timeStartedReceivingCurrentPing: nil
-                        )
-
-                        return false
-                    }
-                } else {
-                    newState = .sendingAck(
-                        characteristic,
-                        .message,
-                        bytesWritten: bytesWritten,
-                        pingRoundIdx: pingRoundIdx,
-                        timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
-                        initiatingPeerID: initiatingPeerID
-                    )
-
-                    return true
-                }
-            }
-        case .sendingSpeak(let characteristic, let lengthMessageState, bytesWritten: var bytesWritten):
-            bytesWritten += numBytes
-            switch lengthMessageState {
-            case .length:
-                if bytesWritten >= BluetoothService.lengthPrefixSize {
-                    BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
-                        $0.type = .speak(Speak.with {
-                            $0.from = self.selfID
-                        })
-                    }, toBuffer: &peripheralState.sendBuffer)
-                
-                    newState = .sendingSpeak(characteristic, .message, bytesWritten: 0)
-
-                    return true
-                } else {
-                    newState = .sendingSpeak(characteristic, .length, bytesWritten: bytesWritten)
-
-                    return true
-                }
-            case .message:
-                if bytesWritten >= peripheralState.sendBuffer.count {
-                    newState = .receivingSpoke(
+                    newState = .receivingPing(
                         characteristic,
                         .length,
                         bytesToRead: BluetoothService.lengthPrefixSize,
-                        timeStartedReceiving: nil
+                        timeStartedReceivingLastPing: timeStartedReceivingCurrentPing,
+                        timeStartedReceivingCurrentPing: nil
                     )
 
                     return false
-                } else {
-                    newState = .sendingSpeak(characteristic, .message, bytesWritten: bytesWritten)
-
-                    return true
                 }
+            } else {
+                newState = .sendingAck(
+                    characteristic,
+                    bytesWritten: bytesWritten,
+                    pingRoundIdx: pingRoundIdx,
+                    timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing,
+                    initiatingPeerID: initiatingPeerID
+                )
+
+                return true
+            }
+        case .sendingSpeak(let characteristic, bytesWritten: var bytesWritten):
+            bytesWritten += numBytes
+            if bytesWritten >= peripheralState.sendBuffer.count {
+                newState = .receivingSpoke(
+                    characteristic,
+                    .length,
+                    bytesToRead: BluetoothService.lengthPrefixSize,
+                    timeStartedReceiving: nil
+                )
+
+                return false
+            } else {
+                newState = .sendingSpeak(characteristic, bytesWritten: bytesWritten)
+
+                return true
             }
         case .receivingSpoke(
             let characteristic,
@@ -758,6 +710,45 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                 }
             }
         }
+    }
+
+    private func serializeAck(
+        pingRoundIdx: UInt32,
+        initiatingPeerID: DistanceManager.PeerID,
+        timeStartedReceivingCurrentPing: UInt64,
+        sendBuffer: inout Data,
+        tmpBuffer: inout Data
+    ) {
+        BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
+            $0.sequenceNumber = pingRoundIdx
+            $0.initiatingPeerID = initiatingPeerID
+            $0.delayInNs = getCurrentTimeInNs() - timeStartedReceivingCurrentPing
+        }, toBuffer: &tmpBuffer)
+
+        BluetoothService.serializeLength(
+            BluetoothService.LengthPrefixType(tmpBuffer.count),
+            toBuffer: &sendBuffer
+        )
+
+        sendBuffer.append(tmpBuffer)
+    }
+
+    private func serializeSpeak(
+        sendBuffer: inout Data,
+        tmpBuffer: inout Data
+    ) {
+        BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
+            $0.type = .speak(Speak.with {
+                $0.from = self.selfID
+            })
+        }, toBuffer: &tmpBuffer)
+
+        BluetoothService.serializeLength(
+            BluetoothService.LengthPrefixType(tmpBuffer.count),
+            toBuffer: &sendBuffer
+        )
+
+        sendBuffer.append(tmpBuffer)
     }
 
     private func calcLatencyForPeer(
@@ -1138,7 +1129,7 @@ extension SpeakTimerCentral: CBPeripheralDelegate {
             return
         }
 
-        self.readAnyData(characteristicData, fromPeripheral: peripheral)
+        self.readAnyData(characteristicData.subdata(in: 0..<characteristicData.count), fromPeripheral: peripheral)
     }
 
     /*
