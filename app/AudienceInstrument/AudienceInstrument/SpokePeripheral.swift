@@ -186,24 +186,19 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         if bytesToRead > 0 {
             self.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
+        } else {
+            #if DEBUG
+            print("Called `readAnyData` with no bytes to read.")
+            #endif
+
+            // No change in state
+            return
         }
 
-        #if DEBUG
-        if bytesToRead == 0 {
-            print("Called `readAnyData` with no bytes to read")
-        }
-        #endif
-        
-        let anotherReadRequired = (self.transitionState(
-            numBytesReadOrWritten: bytesToRead
-        ) ?? false)
-
-        if anotherReadRequired && data.count > Int(bytesToRead) {
-            // TODO: make this a loop instead of recursion
-            self.readAnyData(
-                data.suffix(from: Int(bytesToRead))
-            )
-        }
+        self.transitionState(
+            numBytesReadOrWritten: bytesToRead,
+            readBuffer: data.suffix(from: Int(bytesToRead))
+        )
     }
 
     private func writeAnyData() {
@@ -285,24 +280,32 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         print("\(#function): bytesWritten: \(bytesWritten)")
         #endif
 
-        let anotherWriteRequired = (self.transitionState(
-            numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten)
-        ) ?? false)
-
-        if didSend && anotherWriteRequired {
-            // TODO: make this a loop instead of recursion
-            self.writeAnyData()
+        guard bytesWritten > 0 else {
+            // No change in state
+            return
         }
+
+        self.transitionState(
+            numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten),
+            successfullySent: didSend
+        )
     }
 
     private func transitionState(
-        numBytesReadOrWritten numBytes: BluetoothService.LengthPrefixType
-    ) -> Bool? {
+        numBytesReadOrWritten numBytes: BluetoothService.LengthPrefixType,
+        successfullySent: Bool = false,
+        readBuffer: Data? = nil
+    ) {
         guard let actualState = self.state else {
-            return nil
+            return
         }
+
         var newState = actualState
-        var doWrite = false
+        // Next state is either a write, a read, or neither
+        enum NextStateAction {
+            case read, write
+        }
+        var nextStateAction: NextStateAction? = nil
 
         #if DEBUG
         self.printState("\(#function) FROM")
@@ -311,7 +314,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         defer {
             self.state = newState
 
-            if doWrite {
+            switch nextStateAction {
+            case .none:
+                break
+            case .some(.read):
+                self.readAnyData(readBuffer!)
+            case .some(.write):
                 self.writeAnyData()
             }
 
@@ -322,7 +330,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         switch actualState {
         case .advertising:
-            return nil
+            return
         case .sendingPing(var bytesWritten):
             bytesWritten += numBytes
             if bytesWritten >= self.sendBuffer.count {
@@ -330,14 +338,14 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     .length,
                     bytesToRead: BluetoothService.lengthPrefixSize
                 )
-
-                return false
             } else {
                 newState = .sendingPing(
                     bytesWritten: bytesWritten
                 )
 
-                return true
+                if successfullySent {
+                    nextStateAction = .write
+                }
             }
         case .receivingAck(let lengthMessageState, var bytesToRead):
             bytesToRead -= numBytes
@@ -357,15 +365,15 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
                     self.lastTimeStartedReceiving = self.timeStartedReceiving
                     self.timeStartedReceiving = getCurrentTimeInNs()
-
-                    return true
                 } else {
                     newState = .receivingAck(
                         .length,
                         bytesToRead: bytesToRead
                     )
+                }
 
-                    return true
+                if readBuffer!.count >= bytesToRead {
+                    nextStateAction = .read
                 }
             case .message:
                 if bytesToRead == 0 {
@@ -392,7 +400,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                             bytesToRead: BluetoothService.lengthPrefixSize
                         )
 
-                        return true
+                        if readBuffer!.count >= BluetoothService.lengthPrefixSize {
+                            nextStateAction = .read
+                        }
                     } else {
                         newState = .sendingPing(
                             bytesWritten: 0
@@ -401,9 +411,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         self.serializePing()
 
                         // Necessary because transitioning from receiving to sending state
-                        doWrite = true
-
-                        return false
+                        nextStateAction = .write
                     }
                 } else {
                     newState = .receivingAck(
@@ -411,7 +419,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    return true
+                    if readBuffer!.count >= bytesToRead {
+                        nextStateAction = .read
+                    }
                 }
             }
         case .receivingSpeak(let lengthMessageState, var bytesToRead):
@@ -432,11 +442,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     self.speakingDelay = try! self.distanceCalculator?.speak(
                         receivedAt: getCurrentTimeInNs()
                     )
-
-                    return true
                 } else {
                     newState = .receivingSpeak(.length, bytesToRead: bytesToRead)
-                    return true
+                }
+
+                if readBuffer!.count >= bytesToRead {
+                    nextStateAction = .read
                 }
             case .message:
                 if bytesToRead == 0 {
@@ -457,30 +468,30 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     self.serializeSpoke()
 
                     // Necessary because transitioning from receiving to sending state
-                    doWrite = true
-
-                    return false
+                    nextStateAction = .write
                 } else {
                     newState = .receivingSpeak(
                         .message,
                         bytesToRead: bytesToRead
                     )
 
-                    return true
+                    if readBuffer!.count >= bytesToRead {
+                        nextStateAction = .read
+                    }
                 }
             }
         case .sendingSpoke(var bytesWritten):
             bytesWritten += numBytes
             if bytesWritten >= self.sendBuffer.count {
                 newState = .advertising
-
-                return nil
             } else {
                 newState = .sendingSpoke(
                     bytesWritten: bytesWritten
                 )
 
-                return true
+                if successfullySent {
+                    nextStateAction = .write
+                }
             }
         }
     }
