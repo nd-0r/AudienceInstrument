@@ -45,9 +45,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     private struct PeripheralState {
         var protocolState: State
-        var sendBuffer: Data
-        var readBuffer: Data
-        var tmpBuffer: Data = Data(repeating: 0, count: MemoryLayout<DistanceProtocolWrapper>.stride)
+        var sendBuffer: Data = Data(capacity: BluetoothService.bufSize)
+        var readBuffer: Data = Data(capacity: BluetoothService.bufSize)
+        var tmpBuffer: Data = Data(capacity: BluetoothService.bufSize)
     }
 
     private let selfID: DistanceManager.PeerID
@@ -188,9 +188,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             // Save a local copy of the peripheral, so CoreBluetooth doesn't get rid of it.
             self.discoveredPeripherals.append(peripheral)
             self.discoveredPeripheralsState[peripheral] = PeripheralState(
-                protocolState: .discovered(peerID),
-                sendBuffer: Data(),
-                readBuffer: Data()
+                protocolState: .discovered(peerID)
             )
             
             #if DEBUG
@@ -311,9 +309,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                 bytesToRead: BluetoothService.LengthPrefixType(BluetoothService.lengthPrefixSize),
                 timeStartedReceivingLastPing: nil,
                 timeStartedReceivingCurrentPing: nil
-            ),
-            sendBuffer: Data(),
-            readBuffer: Data()
+            )
         )
 
         if let characteristicData = characteristic.value {
@@ -399,7 +395,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
 
         if bytesToRead > 0 {
-            peripheralState.readBuffer.append(data.subdata(in: 0..<Int(bytesToRead)))
+            peripheralState.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
         }
 
         let anotherReadRequired = (self.transitionStateForPeripheral(
@@ -497,6 +493,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
     ) -> Bool? {
         var peripheralState = currPeripheralState
         var newState = peripheralState.protocolState
+        var doWrite = false
 
         defer {
             #if DEBUG
@@ -505,6 +502,10 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
             peripheralState.protocolState = newState
             self.discoveredPeripheralsState[peripheral] = peripheralState
+
+            if doWrite {
+                self.writeAnyData(toPeripheral: peripheral)
+            }
         }
 
         switch peripheralState.protocolState {
@@ -515,13 +516,22 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             let lengthMessageState,
             bytesToRead: var bytesToRead,
             timeStartedReceivingLastPing: let timeStartedReceivingLastPing,
-            timeStartedReceivingCurrentPing: let timeStartedReceivingCurrentPing
+            timeStartedReceivingCurrentPing: var timeStartedReceivingCurrentPing
         ):
             bytesToRead -= numBytes
+
+            if timeStartedReceivingCurrentPing == nil {
+                timeStartedReceivingCurrentPing = opStartTime!
+            }
+
             switch lengthMessageState {
             case .length:
                 if bytesToRead == 0 {
-                    bytesToRead = BluetoothService.deserializeLength(fromBuffer: peripheralState.readBuffer)
+                    bytesToRead = BluetoothService.deserializeLength(
+                        fromBuffer: peripheralState.readBuffer[
+                            0..<Data.Index(BluetoothService.lengthPrefixSize)
+                        ]
+                    )
 
                     newState = .receivingPing(
                         characteristic,
@@ -545,7 +555,15 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                 }
             case .message:
                 if bytesToRead == 0 {
-                    let pingMessage = BluetoothService.deserializeMeasurementMessage(fromBuffer: peripheralState.readBuffer)
+                    let pingMessage = BluetoothService.deserializeMeasurementMessage(
+                        fromBuffer: peripheralState.readBuffer[
+                                Data.Index(
+                                    BluetoothService.lengthPrefixSize
+                                )..<Data.Index(
+                                    BluetoothService.lengthPrefixSize + numBytes
+                                )
+                            ]
+                        )
 
                     self.calcLatencyForPeer(
                         peer: pingMessage.initiatingPeerID,
@@ -570,7 +588,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         initiatingPeerID: pingMessage.initiatingPeerID
                     )
 
-//                    self.writeAnyData(toPeripheral: peripheral)
+                    // Necessary because transitioning from receive to send state
+                    doWrite = true
 
                     return false
                 } else {
@@ -658,7 +677,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             case .length:
                 if bytesToRead == 0 {
                     bytesToRead = BluetoothService.deserializeLength(
-                        fromBuffer: peripheralState.readBuffer
+                        fromBuffer: peripheralState.readBuffer[
+                            0..<Data.Index(BluetoothService.lengthPrefixSize)
+                        ]
                     )
 
                     newState = .receivingSpoke(
@@ -682,8 +703,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             case .message:
                 if bytesToRead == 0 {
                     let spokeMessage = BluetoothService.deserializeProtocolMessage(
-                        fromBuffer: peripheralState.readBuffer
-                    )
+                        fromBuffer: peripheralState.readBuffer[
+                                Data.Index(
+                                    BluetoothService.lengthPrefixSize
+                                )..<Data.Index(
+                                    BluetoothService.lengthPrefixSize + numBytes
+                                )
+                            ]
+                        )
 
                     let peerLatency = self.latencyByPeer[spokeMessage.spoke.from]!
                     try! self.distanceCalculator?.heardPeerSpeak(

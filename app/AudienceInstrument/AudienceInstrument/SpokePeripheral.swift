@@ -31,14 +31,15 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         case sendingSpoke(bytesWritten: BluetoothService.LengthPrefixType)
     }
 
-    private var tmpBuffer: Data = Data(repeating: 0, count: MemoryLayout<DistanceProtocolWrapper>.stride)
-    private var sendBuffer: Data!
-    private var readBuffer: Data!
+    private var tmpBuffer: Data = Data(capacity: BluetoothService.bufSize)
+    private var sendBuffer: Data = Data(capacity: BluetoothService.bufSize)
+    private var readBuffer: Data = Data(capacity: BluetoothService.bufSize)
     private var state: State? = nil
 
     private var numPingRounds: UInt = 0
     private var pingRoundIdx: UInt32 = 0
     private var timeStartedSending: UInt64? = nil
+    private var lastTimeStartedReceiving: UInt64? = nil
     private var timeStartedReceiving: UInt64? = nil
     private var speakingDelay: UInt64? = nil
     private var latency: UInt64? = nil
@@ -96,8 +97,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         self.state = nil
         self.transferCharacteristic = nil
         self.connectedCentral = nil
-        self.readBuffer = Data()
-        self.sendBuffer = Data()
+        self.tmpBuffer = Data(capacity: BluetoothService.bufSize)
+        self.sendBuffer = Data(capacity: BluetoothService.bufSize)
+        self.readBuffer = Data(capacity: BluetoothService.bufSize)
         self.numPingRounds = 0
         self.pingRoundIdx = 0
         self.timeStartedSending = nil
@@ -144,10 +146,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             bytesWritten: 0
         )
 
-        self.sendBuffer = Data()
-        self.readBuffer = Data()
-
         self.serializePing()
+
+        self.writeAnyData()
     }
 
     private func readAnyData(_ data: Data) {
@@ -184,7 +185,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
 
         if bytesToRead > 0 {
-            self.readBuffer.append(data.subdata(in: 0..<Int(bytesToRead)))
+            self.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
         }
 
         #if DEBUG
@@ -301,6 +302,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             return nil
         }
         var newState = actualState
+        var doWrite = false
 
         #if DEBUG
         self.printState("\(#function) FROM")
@@ -308,6 +310,11 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         defer {
             self.state = newState
+
+            if doWrite {
+                self.writeAnyData()
+            }
+
             #if DEBUG
             self.printState("\(#function) TO")
             #endif
@@ -321,9 +328,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             if bytesWritten >= self.sendBuffer.count {
                 newState = .receivingAck(
                     .length,
-                    bytesToRead: BluetoothService.LengthPrefixType(
-                        MemoryLayout<DistanceProtocolWrapper>.stride
-                    )
+                    bytesToRead: BluetoothService.lengthPrefixSize
                 )
 
                 return false
@@ -340,7 +345,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             case .length:
                 if bytesToRead == 0 {
                     bytesToRead = BluetoothService.deserializeLength(
-                        fromBuffer: self.readBuffer
+                        fromBuffer: self.readBuffer[
+                            0..<Data.Index(BluetoothService.lengthPrefixSize)
+                        ]
                     )
 
                     newState = .receivingAck(
@@ -348,6 +355,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
+                    self.lastTimeStartedReceiving = self.timeStartedReceiving
                     self.timeStartedReceiving = getCurrentTimeInNs()
 
                     return true
@@ -364,9 +372,16 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     // Finished a round of ping-ack
                     self.pingRoundIdx += 1
 
+                    // TODO: move slicing into utils
                     let message = BluetoothService.deserializeMeasurementMessage(
-                        fromBuffer: self.readBuffer
-                    )
+                        fromBuffer: self.readBuffer[
+                                Data.Index(
+                                    BluetoothService.lengthPrefixSize
+                                )..<Data.Index(
+                                    BluetoothService.lengthPrefixSize + numBytes
+                                )
+                            ]
+                        )
 
                     self.calcLatency(delay: message.delayInNs)
 
@@ -374,9 +389,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         // transition to speaking
                         newState = .receivingSpeak(
                             .length,
-                            bytesToRead: BluetoothService.LengthPrefixType(
-                                MemoryLayout<DistanceProtocolWrapper>.stride
-                            )
+                            bytesToRead: BluetoothService.lengthPrefixSize
                         )
 
                         return true
@@ -386,6 +399,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         )
 
                         self.serializePing()
+
+                        // Necessary because transitioning from receiving to sending state
+                        doWrite = true
 
                         return false
                     }
@@ -405,7 +421,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             switch lengthMessageState {
             case .length:
                 if bytesToRead == 0 {
-                    bytesToRead = BluetoothService.deserializeLength(fromBuffer: self.readBuffer)
+                    bytesToRead = BluetoothService.deserializeLength(
+                        fromBuffer: self.readBuffer[
+                            0..<Data.Index(BluetoothService.lengthPrefixSize)
+                        ]
+                    )
+
                     newState = .receivingSpeak(.message, bytesToRead: bytesToRead)
 
                     self.speakingDelay = try! self.distanceCalculator?.speak(
@@ -420,14 +441,23 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             case .message:
                 if bytesToRead == 0 {
                     let message = BluetoothService.deserializeProtocolMessage(
-                        fromBuffer: self.readBuffer
-                    )
+                        fromBuffer: self.readBuffer[
+                                Data.Index(
+                                    BluetoothService.lengthPrefixSize
+                                )..<Data.Index(
+                                    BluetoothService.lengthPrefixSize + numBytes
+                                )
+                            ]
+                        )
 
                     self.updateDelegate?.receivedSpeakMessage(from: message.spoke.from)
 
                     newState = .sendingSpoke(bytesWritten: 0)
 
                     self.serializeSpoke()
+
+                    // Necessary because transitioning from receiving to sending state
+                    doWrite = true
 
                     return false
                 } else {
@@ -458,8 +488,10 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     private func serializePing() {
         var delay: UInt64 = 0
 
-        if let actualTimeStartedReceiving = self.timeStartedReceiving {
-            delay = getCurrentTimeInNs() - actualTimeStartedReceiving
+        self.timeStartedSending = getCurrentTimeInNs()
+
+        if let actualLastTimeStartedReceiving = self.lastTimeStartedReceiving {
+            delay = self.timeStartedSending! - actualLastTimeStartedReceiving
         }
 
         BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
@@ -472,8 +504,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             BluetoothService.LengthPrefixType(self.tmpBuffer.count),
             toBuffer: &self.sendBuffer
         )
-
-        self.timeStartedSending = getCurrentTimeInNs()
 
         self.sendBuffer.append(self.tmpBuffer)
     }
@@ -532,8 +562,8 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         self.latency = BluetoothService.calcLatency(
             lastLatency: self.latency,
-            lastPingRecvTimeInNS: actualTimeStartedReceiving,
-            pingRecvTimeInNS: self.timeStartedSending!,
+            lastPingRecvTimeInNS: self.timeStartedSending!,
+            pingRecvTimeInNS: actualTimeStartedReceiving,
             delayAtPeripheralInNS: delay
         )
         #if DEBUG
@@ -684,7 +714,7 @@ extension SpokePeripheral: CBPeripheralManagerDelegate {
                 continue
             }
 
-            self.readAnyData(requestValue)
+            self.readAnyData(requestValue.subdata(in: 0..<Int(requestValue.count)))
         }
     }
 }

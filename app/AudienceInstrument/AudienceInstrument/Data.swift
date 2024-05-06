@@ -19,6 +19,16 @@ struct BluetoothService {
     static let lengthPrefixSize = BluetoothService.LengthPrefixType(
         MemoryLayout<LengthPrefixType>.stride
     )
+    // Allocate each buffer to be the maximum size of a message plus the size of
+    //   the length prefix padded to a multiple of 16 bytes
+    static let bufSize =
+    Int((
+        1 + ((
+            BluetoothService.LengthPrefixType(
+                MemoryLayout<DistanceProtocolWrapper>.stride
+            ) + BluetoothService.lengthPrefixSize
+        ) >> 4)
+    ) << 4)
     static let rssiDiscoveryThresh = -80
     // TODO: update?
     static let spokeTimeout: DispatchTimeInterval = .seconds(60)
