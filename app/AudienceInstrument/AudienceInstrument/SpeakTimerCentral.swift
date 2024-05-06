@@ -43,8 +43,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         )
     }
 
-    private struct PeripheralState {
-        var protocolState: State
+    private struct PeripheralBuffers {
         var sendBuffer: Data = Data(capacity: BluetoothService.bufSize)
         var readBuffer: Data = Data(capacity: BluetoothService.bufSize)
         var tmpBuffer: Data = Data(capacity: BluetoothService.bufSize)
@@ -57,7 +56,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     var centralManager: CBCentralManager!
     var discoveredPeripherals: [CBPeripheral] = []
-    private var discoveredPeripheralsState: [CBPeripheral:PeripheralState] = [:]
+    private var discoveredPeripheralsState: [CBPeripheral:State] = [:]
+    private var discoveredPeripheralsBuffers: [CBPeripheral:PeripheralBuffers] = [:]
     var transferCharacteristics: [CBCharacteristic]?
 
     weak var distanceCalculator: (any DistanceCalculatorProtocol)?
@@ -187,10 +187,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         if !self.discoveredPeripherals.contains(where: { $0 == peripheral }) {
             // Save a local copy of the peripheral, so CoreBluetooth doesn't get rid of it.
             self.discoveredPeripherals.append(peripheral)
-            self.discoveredPeripheralsState[peripheral] = PeripheralState(
-                protocolState: .discovered(peerID)
-            )
-            
+            self.discoveredPeripheralsState[peripheral] = .discovered(peerID)
+
             #if DEBUG
             print("Connecting to peripheral \(peripheral)")
             #endif
@@ -223,8 +221,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         print("\(#function) called with \(String(describing: peripheral))")
         #endif
 
-        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
-              case .discovered(_) = peripheralState.protocolState else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              case .discovered(_) = state else {
             fatalError("\(#function) called with peripheral not discovered yet.")
         }
 
@@ -240,8 +238,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         _ characteristic: CBCharacteristic,
         forPeripheral peripheral: CBPeripheral
     ) {
-        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
-              case .discovered(let peerID) = peripheralState.protocolState else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              case .discovered(let peerID) = state else {
             #if DEBUG
             fatalError("Tried to subscribe to peripheral not in connected state.")
             #else
@@ -263,11 +261,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
                 self.reconnectablePeersOwned.append(peerID)
                 // Ready to start protocol
-                self.discoveredPeripheralsState[peripheral] = PeripheralState(
-                    protocolState: .subscribed(characteristic),
-                    sendBuffer: peripheralState.sendBuffer,
-                    readBuffer: peripheralState.readBuffer
-                )
+                self.discoveredPeripheralsState[peripheral] = .subscribed(characteristic)
+                self.discoveredPeripheralsBuffers[peripheral] = PeripheralBuffers()
             } else {
                 #if DEBUG
                 print("Denied peripheral connection")
@@ -291,8 +286,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         print("Starting protocol for peripheral: \(String(describing: peripheral))")
         #endif
 
-        guard let peripheralState = self.discoveredPeripheralsState[peripheral],
-              case .subscribed(let characteristic) = peripheralState.protocolState else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              case .subscribed(let characteristic) = state else {
             #if DEBUG
             print("Tried to start protocol for peripheral not in connected state.")
             #endif
@@ -302,14 +297,12 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         self.subscribeToCharacteristic(atPeripheral: peripheral, characteristic)
 
         self.stopScanning()
-        self.discoveredPeripheralsState[peripheral] = PeripheralState(
-            protocolState: .receivingPing(
-                characteristic,
-                .length,
-                bytesToRead: BluetoothService.LengthPrefixType(BluetoothService.lengthPrefixSize),
-                timeStartedReceivingLastPing: nil,
-                timeStartedReceivingCurrentPing: nil
-            )
+        self.discoveredPeripheralsState[peripheral] = .receivingPing(
+            characteristic,
+            .length,
+            bytesToRead: BluetoothService.LengthPrefixType(BluetoothService.lengthPrefixSize),
+            timeStartedReceivingLastPing: nil,
+            timeStartedReceivingCurrentPing: nil
         )
 
         if let characteristicData = characteristic.value {
@@ -350,7 +343,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 // MARK: - read and write functions
 
     private func readAnyData(_ data: Data, fromPeripheral peripheral: CBPeripheral) {
-        guard var peripheralState = self.discoveredPeripheralsState[peripheral] else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              var buffers = self.discoveredPeripheralsBuffers[peripheral] else {
             #if DEBUG
             print("Tried to call \(#function) without a state for peripheral \(String(describing: peripheral))")
             #endif
@@ -365,7 +359,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         let bytesToRead: BluetoothService.LengthPrefixType
         let timeStartedReceiving: UInt64?
 
-        switch peripheralState.protocolState {
+        switch state {
         case .receivingPing(
             _,
             _,
@@ -395,27 +389,22 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
 
         if bytesToRead > 0 {
-            peripheralState.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
+            buffers.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
         }
 
-        let anotherReadRequired = (self.transitionStateForPeripheral(
+        self.transitionStateForPeripheral(
             peripheral,
-            currPeripheralState: peripheralState,
+            currPeripheralState: state,
+            currPeripheralBuffers: &buffers,
             numBytesReadOrWritten: bytesToRead,
-            opStartTime: timeStartedReceiving
-        ) ?? false)
-
-        if anotherReadRequired {
-            // TODO: make this a loop instead of recursion
-            self.readAnyData(
-                data.suffix(from: Int(bytesToRead)),
-                fromPeripheral: peripheral
-            )
-        }
+            opStartTime: timeStartedReceiving,
+            readBuffer: data
+        )
     }
 
     private func writeAnyData(toPeripheral peripheral: CBPeripheral) {
-        guard let peripheralState = self.discoveredPeripheralsState[peripheral] else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              var buffers = self.discoveredPeripheralsBuffers[peripheral] else {
             #if DEBUG
             print("Tried to call \(#function) without a state for peripheral \(String(describing: peripheral))")
             #endif
@@ -430,7 +419,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         let characteristic: CBCharacteristic?
         let bufBytesWritten: BluetoothService.LengthPrefixType
 
-        switch peripheralState.protocolState {
+        switch state {
         case .sendingAck(
             let tmpCharacteristic,
             bytesWritten: let tmpBytesWritten,
@@ -452,12 +441,12 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
         // check to see if done writing bytes and peripheral can accept more data
         var bytesWritten: Int = 0
-        let maxBytesToWrite = peripheralState.sendBuffer.count - Int(bufBytesWritten)
+        let maxBytesToWrite = buffers.sendBuffer.count - Int(bufBytesWritten)
         while bytesWritten < maxBytesToWrite &&
               peripheral.canSendWriteWithoutResponse {
             let mtu = peripheral.maximumWriteValueLength(for: .withoutResponse)
 
-            let data = peripheralState.sendBuffer.suffix(from: Int(bufBytesWritten) + bytesWritten)
+            let data = buffers.sendBuffer.suffix(from: Int(bufBytesWritten) + bytesWritten)
             var rawPacket = [UInt8]()
             let numBytesToWrite = min(mtu, maxBytesToWrite - bytesWritten)
 			data.copyBytes(to: &rawPacket, count: numBytesToWrite)
@@ -468,17 +457,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             bytesWritten += numBytesToWrite
         }
 
-        let anotherWriteRequired = (self.transitionStateForPeripheral(
+        self.transitionStateForPeripheral(
             peripheral,
-            currPeripheralState: peripheralState,
+            currPeripheralState: state,
+            currPeripheralBuffers: &buffers,
             numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten),
-            opStartTime: nil
-        ) ?? false)
-
-        if peripheral.canSendWriteWithoutResponse && anotherWriteRequired {
-            // TODO: make this a loop instead of recursion
-            self.writeAnyData(toPeripheral: peripheral)
-        }
+            opStartTime: nil,
+            canSendWrite: peripheral.canSendWriteWithoutResponse
+        )
     }
 
 // MARK: - state machine
@@ -487,30 +473,39 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
     // TODO: this is a huge function
     private func transitionStateForPeripheral(
         _ peripheral: CBPeripheral,
-        currPeripheralState: PeripheralState,
+        currPeripheralState state: State,
+        currPeripheralBuffers buffers: inout PeripheralBuffers,
         numBytesReadOrWritten numBytes: BluetoothService.LengthPrefixType,
-        opStartTime: UInt64?
-    ) -> Bool? {
-        var peripheralState = currPeripheralState
-        var newState = peripheralState.protocolState
-        var doWrite = false
+        opStartTime: UInt64?,
+        readBuffer: Data? = nil,
+        canSendWrite: Bool = false
+    ) {
+        var newState = state
+        enum NextStateAction {
+            case read, write
+        }
+        var nextStateAction: NextStateAction? = nil
 
         defer {
             #if DEBUG
-            print("Transitioning peripheral \(String(describing: peripheral)) from state \(String(describing: peripheralState.protocolState)) to state \(String(describing: newState))")
+            print("Transitioning peripheral \(String(describing: peripheral)) from state \(String(describing: state)) to state \(String(describing: newState))")
             #endif
 
-            peripheralState.protocolState = newState
-            self.discoveredPeripheralsState[peripheral] = peripheralState
+            self.discoveredPeripheralsState[peripheral] = newState
 
-            if doWrite {
+            switch nextStateAction {
+            case .none:
+                break
+            case .some(.read):
+                self.readAnyData(readBuffer!, fromPeripheral: peripheral)
+            case .some(.write):
                 self.writeAnyData(toPeripheral: peripheral)
             }
         }
 
-        switch peripheralState.protocolState {
+        switch state {
         case .discovered, .subscribed(_):
-            return nil
+            return
         case .receivingPing(
             let characteristic,
             let lengthMessageState,
@@ -528,7 +523,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             case .length:
                 if bytesToRead == 0 {
                     bytesToRead = BluetoothService.deserializeLength(
-                        fromBuffer: peripheralState.readBuffer[
+                        fromBuffer: buffers.readBuffer[
                             0..<Data.Index(BluetoothService.lengthPrefixSize)
                         ]
                     )
@@ -540,8 +535,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingLastPing: timeStartedReceivingLastPing,
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing
                     )
-
-                    return true
                 } else {
                     newState = .receivingPing(
                         characteristic,
@@ -550,13 +543,15 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingLastPing: timeStartedReceivingLastPing,
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing
                     )
+                }
 
-                    return true
+                if readBuffer!.count >= bytesToRead {
+                    nextStateAction = .read
                 }
             case .message:
                 if bytesToRead == 0 {
                     let pingMessage = BluetoothService.deserializeMeasurementMessage(
-                        fromBuffer: peripheralState.readBuffer[
+                        fromBuffer: buffers.readBuffer[
                                 Data.Index(
                                     BluetoothService.lengthPrefixSize
                                 )..<Data.Index(
@@ -576,8 +571,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         pingRoundIdx: pingMessage.sequenceNumber,
                         initiatingPeerID: pingMessage.initiatingPeerID,
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing!,
-                        sendBuffer: &peripheralState.sendBuffer,
-                        tmpBuffer: &peripheralState.tmpBuffer
+                        sendBuffer: &buffers.sendBuffer,
+                        tmpBuffer: &buffers.tmpBuffer
                     )
 
                     newState = .sendingAck(
@@ -589,9 +584,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     )
 
                     // Necessary because transitioning from receive to send state
-                    doWrite = true
-
-                    return false
+                    nextStateAction = .write
                 } else {
                     newState = .receivingPing(
                         characteristic,
@@ -601,7 +594,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing
                     )
 
-                    return true
+                    if readBuffer!.count >= bytesToRead {
+                        nextStateAction = .read
+                    }
                 }
             }
         case .sendingAck(
@@ -612,7 +607,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             initiatingPeerID: let initiatingPeerID
         ):
             bytesWritten += numBytes
-            if bytesWritten >= peripheralState.sendBuffer.count {
+            if bytesWritten >= buffers.sendBuffer.count {
                 // Finished a round of ping-ack
                 pingRoundIdx += 1
                 if pingRoundIdx >= self.expectedNumPingRoundsPerPeripheral {
@@ -621,13 +616,15 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     try! self.distanceCalculator?.listen()
 
                     self.serializeSpeak(
-                        sendBuffer: &peripheralState.sendBuffer,
-                        tmpBuffer: &peripheralState.tmpBuffer
+                        sendBuffer: &buffers.sendBuffer,
+                        tmpBuffer: &buffers.tmpBuffer
                     )
 
                     newState = .sendingSpeak(characteristic, bytesWritten: 0)
 
-                    return true
+                    if canSendWrite {
+                        nextStateAction = .write
+                    }
                 } else {
                     newState = .receivingPing(
                         characteristic,
@@ -637,7 +634,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingCurrentPing: nil
                     )
 
-                    return false
+                    // wait for data from peripheral
                 }
             } else {
                 newState = .sendingAck(
@@ -648,11 +645,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     initiatingPeerID: initiatingPeerID
                 )
 
-                return true
+                if canSendWrite {
+                    nextStateAction = .write
+                }
             }
         case .sendingSpeak(let characteristic, bytesWritten: var bytesWritten):
             bytesWritten += numBytes
-            if bytesWritten >= peripheralState.sendBuffer.count {
+            if bytesWritten >= buffers.sendBuffer.count {
                 newState = .receivingSpoke(
                     characteristic,
                     .length,
@@ -660,11 +659,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     timeStartedReceiving: nil
                 )
 
-                return false
+                // wait for more data
             } else {
                 newState = .sendingSpeak(characteristic, bytesWritten: bytesWritten)
 
-                return true
+                if canSendWrite {
+                    nextStateAction = .write
+                }
             }
         case .receivingSpoke(
             let characteristic,
@@ -677,7 +678,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             case .length:
                 if bytesToRead == 0 {
                     bytesToRead = BluetoothService.deserializeLength(
-                        fromBuffer: peripheralState.readBuffer[
+                        fromBuffer: buffers.readBuffer[
                             0..<Data.Index(BluetoothService.lengthPrefixSize)
                         ]
                     )
@@ -688,8 +689,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         bytesToRead: bytesToRead,
                         timeStartedReceiving: timeStartedReceiving
                     )
-
-                    return true
                 } else {
                     newState = .receivingSpoke(
                         characteristic,
@@ -697,13 +696,15 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         bytesToRead: bytesToRead,
                         timeStartedReceiving: timeStartedReceiving
                     )
+                }
 
-                    return true
+                if readBuffer!.count >= bytesToRead {
+                    nextStateAction = .read
                 }
             case .message:
                 if bytesToRead == 0 {
                     let spokeMessage = BluetoothService.deserializeProtocolMessage(
-                        fromBuffer: peripheralState.readBuffer[
+                        fromBuffer: buffers.readBuffer[
                                 Data.Index(
                                     BluetoothService.lengthPrefixSize
                                 )..<Data.Index(
@@ -723,8 +724,6 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     self.updateDelegate?.receivedSpokeMessage(from: spokeMessage.spoke.from)
 
                     self.finishProtocolForPeripheral(peripheral)
-
-                    return nil
                 } else {
                     newState = .receivingSpoke(
                         characteristic,
@@ -733,7 +732,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceiving: timeStartedReceiving
                     )
 
-                    return true
+                    if readBuffer!.count >= bytesToRead {
+                        nextStateAction = .read
+                    }
                 }
             }
         }
@@ -804,6 +805,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
     private func removePeripheral(withPeripheral peripheral: CBPeripheral) {
         peripheral.delegate = nil // TODO: maybe this is handled internally?
         self.discoveredPeripheralsState[peripheral] = nil
+        self.discoveredPeripheralsBuffers[peripheral] = nil
         self.discoveredPeripherals.removeAll(where: { $0 == peripheral })
 
         switch peripheral.state {
@@ -838,14 +840,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         #if DEBUG
         print("Cleaning up peripheral \(String(describing: discoveredPeripheral))")
         #endif
-        guard let peripheralState = self.discoveredPeripheralsState[discoveredPeripheral] else {
+        guard let state = self.discoveredPeripheralsState[discoveredPeripheral] else {
             #if DEBUG
             print("Tried to clean up peripheral \(String(describing: discoveredPeripheral)) not connected")
             #endif
             return
         }
 
-        switch peripheralState.protocolState {
+        switch state {
         case .discovered(_):
             #if DEBUG
             print("Tried to clean up peripheral \(String(describing: discoveredPeripheral)) not connected")
@@ -868,12 +870,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
     #if DEBUG
     private func printState(forPeripheral peripheral: CBPeripheral, _ message: String) {
-        guard let state = self.discoveredPeripheralsState[peripheral] else {
+        guard let state = self.discoveredPeripheralsState[peripheral],
+              let buffers = self.discoveredPeripheralsBuffers[peripheral] else {
             print("\(message) :: No state for peripheral \(String(describing: peripheral))")
             return
         }
 
-        print("\(message) :: \(String(describing: peripheral.name)) :: State: \(String(describing: state.protocolState)); Send Buffer: \(String(describing: state.sendBuffer)); Read Buffer: \(String(describing: state.readBuffer))")
+        print("\(message) :: \(String(describing: peripheral.name)) :: State: \(String(describing: state)); Send Buffer: \(String(describing: buffers.sendBuffer)); Read Buffer: \(String(describing: buffers.readBuffer))")
     }
     #endif
 }
