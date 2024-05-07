@@ -389,7 +389,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         }
 
         if bytesToRead > 0 {
-            buffers.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
+            buffers.readBuffer.append(data.prefix(Int(bytesToRead)))
         }
 
         self.transitionStateForPeripheral(
@@ -447,8 +447,8 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             let mtu = peripheral.maximumWriteValueLength(for: .withoutResponse)
 
             let data = buffers.sendBuffer.suffix(from: Int(bufBytesWritten) + bytesWritten)
-            var rawPacket = [UInt8]()
             let numBytesToWrite = min(mtu, maxBytesToWrite - bytesWritten)
+            var rawPacket = [UInt8]()
 			data.copyBytes(to: &rawPacket, count: numBytesToWrite)
             let packetData = Data(bytes: &rawPacket, count: numBytesToWrite)
 
@@ -492,12 +492,18 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             #endif
 
             self.discoveredPeripheralsState[peripheral] = newState
+            self.discoveredPeripheralsBuffers[peripheral] = buffers
 
             switch nextStateAction {
             case .none:
                 break
             case .some(.read):
-                self.readAnyData(readBuffer!, fromPeripheral: peripheral)
+                self.readAnyData(
+                    readBuffer!.suffix(
+                        from: Data.Index(numBytes)
+                    ),
+                    fromPeripheral: peripheral
+                )
             case .some(.write):
                 self.writeAnyData(toPeripheral: peripheral)
             }
@@ -545,7 +551,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     )
                 }
 
-                if readBuffer!.count >= bytesToRead {
+                if readBuffer!.count - Int(numBytes) >= bytesToRead {
                     nextStateAction = .read
                 }
             case .message:
@@ -559,6 +565,10 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                                 )
                             ]
                         )
+
+                    #if DEBUG
+                    print("Received ping: seq \(pingMessage.sequenceNumber); initiator \(pingMessage.initiatingPeerID); delay: \(pingMessage.delayInNs)")
+                    #endif
 
                     self.calcLatencyForPeer(
                         peer: pingMessage.initiatingPeerID,
@@ -594,7 +604,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingCurrentPing: timeStartedReceivingCurrentPing
                     )
 
-                    if readBuffer!.count >= bytesToRead {
+                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -602,14 +612,17 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         case .sendingAck(
             let characteristic,
             bytesWritten: var bytesWritten,
-            pingRoundIdx: var pingRoundIdx,
+            pingRoundIdx: let pingRoundIdx,
             timeStartedReceivingCurrentPing: let timeStartedReceivingCurrentPing,
             initiatingPeerID: let initiatingPeerID
         ):
             bytesWritten += numBytes
             if bytesWritten >= buffers.sendBuffer.count {
                 // Finished a round of ping-ack
-                pingRoundIdx += 1
+                #if DEBUG
+                print("Sent ack for ping round \(pingRoundIdx)")
+                #endif
+
                 if pingRoundIdx >= self.expectedNumPingRoundsPerPeripheral {
                     // transition to speaking
                     // TODO: maybe handle error
@@ -698,7 +711,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     )
                 }
 
-                if readBuffer!.count >= bytesToRead {
+                if readBuffer!.count - Int(numBytes) >= bytesToRead {
                     nextStateAction = .read
                 }
             case .message:
@@ -732,7 +745,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceiving: timeStartedReceiving
                     )
 
-                    if readBuffer!.count >= bytesToRead {
+                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -747,6 +760,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         sendBuffer: inout Data,
         tmpBuffer: inout Data
     ) {
+        sendBuffer.removeAll(keepingCapacity: true)
         BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
             $0.sequenceNumber = pingRoundIdx
             $0.initiatingPeerID = initiatingPeerID
@@ -765,6 +779,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         sendBuffer: inout Data,
         tmpBuffer: inout Data
     ) {
+        sendBuffer.removeAll(keepingCapacity: true)
         BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
             $0.type = .speak(Speak.with {
                 $0.from = self.selfID

@@ -148,28 +148,34 @@ extension BluetoothService {
         #endif
     }
 
-    static func deserializeLength(fromBuffer buf: Data) -> BluetoothService.LengthPrefixType {
+    /// It took me hours of debugging to realize that a "slice" or "subrange" or whatever
+    /// they want to call it of data has the same indices as the original data. I guess it's to prevent memory
+    /// leaks and make the language more "safe." But it's confusing as hell. No more "safe" languages.
+    static func deserializeLength(fromBuffer: Data) -> BluetoothService.LengthPrefixType {
         var len: BluetoothService.LengthPrefixType = 0
+        let buf = Data(fromBuffer)
         withUnsafeMutablePointer(to: &len) { ptr in
             buf.copyBytes(to: ptr, count: Int(BluetoothService.lengthPrefixSize))
         }
         #if DEBUG
-        print("\(#function): Deserialized \(buf.count) bytes")
+        print("\(#function): Deserialized \(fromBuffer.count) bytes")
         #endif
         return len
     }
 
-    static func deserializeMeasurementMessage(fromBuffer buf: Data) -> MeasurementMessage {
+    static func deserializeMeasurementMessage(fromBuffer: Data) -> MeasurementMessage {
         #if DEBUG
-        print("\(#function): Deserialized \(buf.count) bytes")
+        print("\(#function): Deserialized \(fromBuffer.count) bytes")
         #endif
+        let buf = Data(fromBuffer)
         return try! MeasurementMessage(serializedData: buf)
     }
 
-    static func deserializeProtocolMessage(fromBuffer buf: Data) -> DistanceProtocolWrapper {
+    static func deserializeProtocolMessage(fromBuffer: Data) -> DistanceProtocolWrapper {
         #if DEBUG
-        print("\(#function): Deserialized \(buf.count) bytes")
+        print("\(#function): Deserialized \(fromBuffer.count) bytes")
         #endif
+        let buf = Data(fromBuffer)
         return try! DistanceProtocolWrapper(serializedData: buf)
     }
 

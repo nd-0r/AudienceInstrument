@@ -185,7 +185,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }
 
         if bytesToRead > 0 {
-            self.readBuffer.append(data.prefix(upTo: Int(bytesToRead)))
+            self.readBuffer.append(data.prefix(Int(bytesToRead)))
         } else {
             #if DEBUG
             print("Called `readAnyData` with no bytes to read.")
@@ -338,6 +338,8 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     .length,
                     bytesToRead: BluetoothService.lengthPrefixSize
                 )
+
+                self.readBuffer.removeAll(keepingCapacity: true)
             } else {
                 newState = .sendingPing(
                     bytesWritten: bytesWritten
@@ -378,6 +380,9 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             case .message:
                 if bytesToRead == 0 {
                     // Finished a round of ping-ack
+                    #if DEBUG
+                    print("Finished round \(self.pingRoundIdx) of ping-ack")
+                    #endif
                     self.pingRoundIdx += 1
 
                     // TODO: move slicing into utils
@@ -395,12 +400,14 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
                     if pingRoundIdx >= self.numPingRounds {
                         // transition to speaking
+                        bytesToRead = BluetoothService.lengthPrefixSize
                         newState = .receivingSpeak(
                             .length,
-                            bytesToRead: BluetoothService.lengthPrefixSize
+                            bytesToRead: bytesToRead
                         )
 
-                        if readBuffer!.count >= BluetoothService.lengthPrefixSize {
+                        self.readBuffer.removeAll(keepingCapacity: true)
+                        if readBuffer!.count - Int(numBytes) >= BluetoothService.lengthPrefixSize {
                             nextStateAction = .read
                         }
                     } else {
@@ -419,7 +426,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    if readBuffer!.count >= bytesToRead {
+                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -446,7 +453,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     newState = .receivingSpeak(.length, bytesToRead: bytesToRead)
                 }
 
-                if readBuffer!.count >= bytesToRead {
+                if readBuffer!.count - Int(numBytes) >= bytesToRead {
                     nextStateAction = .read
                 }
             case .message:
@@ -475,7 +482,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    if readBuffer!.count >= bytesToRead {
+                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -505,6 +512,12 @@ class SpokePeripheral: NSObject, SpokeDelegate {
             delay = self.timeStartedSending! - actualLastTimeStartedReceiving
         }
 
+        #if DEBUG
+        print("Serializing ping: seq \(self.pingRoundIdx); initiator \(self.selfID); delay: \(delay)")
+        #endif
+        self.sendBuffer.removeAll(keepingCapacity: true)
+        self.tmpBuffer.removeAll(keepingCapacity: true)
+
         BluetoothService.serializeMeasurementMessage(MeasurementMessage.with {
             $0.sequenceNumber = self.pingRoundIdx
             $0.initiatingPeerID = self.selfID
@@ -520,6 +533,8 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     }
 
     private func serializeSpoke() {
+        self.sendBuffer.removeAll(keepingCapacity: true)
+
         BluetoothService.serializeProtocolMessage(DistanceProtocolWrapper.with {
             $0.type = .spoke(Spoke.with {
                 $0.from = self.selfID
@@ -528,7 +543,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
         }, toBuffer: &self.tmpBuffer)
 
         BluetoothService.serializeLength(
-            BluetoothService.LengthPrefixType(MemoryLayout<DistanceProtocolWrapper>.stride),
+            BluetoothService.LengthPrefixType(self.tmpBuffer.count),
             toBuffer: &self.sendBuffer
         )
 
