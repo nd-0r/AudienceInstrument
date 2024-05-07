@@ -623,7 +623,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                 print("Sent ack for ping round \(pingRoundIdx)")
                 #endif
 
-                if pingRoundIdx >= self.expectedNumPingRoundsPerPeripheral {
+                if pingRoundIdx + 1 >= self.expectedNumPingRoundsPerPeripheral {
                     // transition to speaking
                     // TODO: maybe handle error
                     try! self.distanceCalculator?.listen()
@@ -647,6 +647,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         timeStartedReceivingCurrentPing: nil
                     )
 
+                    buffers.readBuffer.removeAll(keepingCapacity: true)
                     // wait for data from peripheral
                 }
             } else {
@@ -672,6 +673,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     timeStartedReceiving: nil
                 )
 
+                buffers.readBuffer.removeAll(keepingCapacity: true)
                 // wait for more data
             } else {
                 newState = .sendingSpeak(characteristic, bytesWritten: bytesWritten)
@@ -684,9 +686,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             let characteristic,
             let lengthMessageState,
             bytesToRead: var bytesToRead,
-            timeStartedReceiving: let timeStartedReceiving
+            timeStartedReceiving: var timeStartedReceiving
         ):
             bytesToRead -= numBytes
+
+            if timeStartedReceiving == nil {
+                timeStartedReceiving = opStartTime!
+            }
+
             switch lengthMessageState {
             case .length:
                 if bytesToRead == 0 {

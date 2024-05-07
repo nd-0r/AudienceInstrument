@@ -299,7 +299,7 @@ fileprivate struct _DistanceCalculator {
     // MARK: Core state
     private static let typeName: String = String(describing: DistanceCalculator.self)
     private static let expectedToneLen: TimeInterval = 1.0
-    private static let calculateWaitTimeMultiplier: TimeInterval = 1.2
+    private static let calculateWaitTimeMultiplier: TimeInterval = 3.0
     // TODO: Would be nice to calculate this more precisely
     private static let speedOfSoundInMPerNS: Double = 343.3 * Double(NSEC_PER_SEC)
     private static let listenerConstants = DistanceListener.Constants(
@@ -312,7 +312,7 @@ fileprivate struct _DistanceCalculator {
         hopSize: 16,
         minFreqListenHz: 6000,
         maxFreqListenHz: 8000,
-        scoreThresh: 0.05,
+        scoreThresh: 0.03,
         sdSilenceThresh: 0.01,
         toneLenToleranceTime: 0.01
     )

@@ -101,6 +101,12 @@ struct BluetoothService {
         }
     }
 
+    deinit {
+        #if DEBUG
+        print("Deinitialized ConnectionManagerModel!")
+        #endif
+    }
+
     public func startAdvertising() {
         guard debugUI == false else {
             return

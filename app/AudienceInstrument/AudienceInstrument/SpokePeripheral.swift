@@ -39,7 +39,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
     private var numPingRounds: UInt = 0
     private var pingRoundIdx: UInt32 = 0
     private var timeStartedSending: UInt64? = nil
-    private var lastTimeStartedReceiving: UInt64? = nil
     private var timeStartedReceiving: UInt64? = nil
     private var speakingDelay: UInt64? = nil
     private var latency: UInt64? = nil
@@ -197,7 +196,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         self.transitionState(
             numBytesReadOrWritten: bytesToRead,
-            readBuffer: data.suffix(from: Int(bytesToRead))
+            readBuffer: data.suffix(data.count - Int(bytesToRead))
         )
     }
 
@@ -365,7 +364,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    self.lastTimeStartedReceiving = self.timeStartedReceiving
                     self.timeStartedReceiving = getCurrentTimeInNs()
                 } else {
                     newState = .receivingAck(
@@ -407,9 +405,6 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         )
 
                         self.readBuffer.removeAll(keepingCapacity: true)
-                        if readBuffer!.count - Int(numBytes) >= BluetoothService.lengthPrefixSize {
-                            nextStateAction = .read
-                        }
                     } else {
                         newState = .sendingPing(
                             bytesWritten: 0
@@ -426,7 +421,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
+                    if readBuffer!.count >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -453,7 +448,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                     newState = .receivingSpeak(.length, bytesToRead: bytesToRead)
                 }
 
-                if readBuffer!.count - Int(numBytes) >= bytesToRead {
+                if readBuffer!.count >= bytesToRead {
                     nextStateAction = .read
                 }
             case .message:
@@ -468,7 +463,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                             ]
                         )
 
-                    self.updateDelegate?.receivedSpeakMessage(from: message.spoke.from)
+                    self.updateDelegate?.receivedSpeakMessage(from: message.speak.from)
 
                     newState = .sendingSpoke(bytesWritten: 0)
 
@@ -482,7 +477,7 @@ class SpokePeripheral: NSObject, SpokeDelegate {
                         bytesToRead: bytesToRead
                     )
 
-                    if readBuffer!.count - Int(numBytes) >= bytesToRead {
+                    if readBuffer!.count >= bytesToRead {
                         nextStateAction = .read
                     }
                 }
@@ -508,8 +503,8 @@ class SpokePeripheral: NSObject, SpokeDelegate {
 
         self.timeStartedSending = getCurrentTimeInNs()
 
-        if let actualLastTimeStartedReceiving = self.lastTimeStartedReceiving {
-            delay = self.timeStartedSending! - actualLastTimeStartedReceiving
+        if let actualTimeStartedReceiving = self.timeStartedReceiving {
+            delay = self.timeStartedSending! - actualTimeStartedReceiving
         }
 
         #if DEBUG

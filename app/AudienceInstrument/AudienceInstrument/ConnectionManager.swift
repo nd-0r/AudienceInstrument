@@ -152,6 +152,10 @@ actor ConnectionManager:
     }
 
     deinit {
+        #if DEBUG
+        print("Deinitializing ConnectionManager!")
+        #endif
+
         guard debugUI == false else {
             return
         }

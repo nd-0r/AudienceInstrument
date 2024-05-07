@@ -482,7 +482,6 @@ class DistanceListener {
             #if DEBUG
 //            print("Processing buffer")
 //            print("[\(String(describing: buf.baseAddress![0]))\((1..<self.constants.fftSize).map({ idx in String(describing: buf.baseAddress![idx])}).reduce("", { res, elem in res + ", " + elem}))]")
-            print(numSamplesFromStart) // FIXME: Remove
             #endif
             self.highpassFilter(&buf)
             self.applyWindow(&buf)

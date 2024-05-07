@@ -24,4 +24,4 @@ serializePing()
 let len = BluetoothService.deserializeLength(fromBuffer: sendBuffer.prefix(upTo: Data.Index(BluetoothService.lengthPrefixSize)))
 let message = BluetoothService.deserializeMeasurementMessage(fromBuffer: sendBuffer[Data.Index(BluetoothService.lengthPrefixSize)..<Data.Index(BluetoothService.lengthPrefixSize + len)])
 
-message.initiatingPeerID
+message.sequenceNumber

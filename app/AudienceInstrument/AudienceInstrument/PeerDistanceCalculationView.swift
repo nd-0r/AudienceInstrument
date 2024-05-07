@@ -41,7 +41,7 @@ struct PeerDistanceStatusView: View {
 struct PeerDistanceCalculationView: View {
     @EnvironmentObject var connectionManagerModel: ConnectionManagerModel
     @State var connecting = true
-    @State var markedPeers: Set<MCPeerID> = []
+    @State var markedPeers: Set<DistanceManager.PeerID> = []
     @State var errorMessage = ""
 
     var body: some View {
@@ -59,22 +59,22 @@ struct PeerDistanceCalculationView: View {
                 ForEach(
                     Array(connectionManagerModel.sessionPeers.keys),
                     id: \.self
-                ) { mcPeerId in
+                ) { peerID in
                     PeerDistanceStatusView(
-                        status: connectionManagerModel.sessionPeers[mcPeerId]!,
-                        clientName: mcPeerId.displayName,
-                        clientDistanceInM: estimatedDists[mcPeerId.id] ?? nil,
+                        status: connectionManagerModel.sessionPeers[peerID]!,
+                        clientName: peerID.displayName,
+                        clientDistanceInM: estimatedDists[peerID.id] ?? nil,
                         didMarkCallback: {
-                            if markedPeers.contains(mcPeerId) {
-                                markedPeers.remove(mcPeerId)
+                            if markedPeers.contains(peerID.id) {
+                                markedPeers.remove(peerID.id)
                                 errorMessage = ""
                             } else if markedPeers.count < 3 {
-                                markedPeers.insert(mcPeerId)
+                                markedPeers.insert(peerID.id)
                             } else {
                                 errorMessage = "Cannot calculate distance to more than 3 neighbors."
                             }
                         },
-                        marked: markedPeers.contains(mcPeerId)
+                        marked: markedPeers.contains(peerID.id)
                     )
                 }
             }
@@ -83,7 +83,7 @@ struct PeerDistanceCalculationView: View {
             Button {
                 connectionManagerModel.initiateDistanceCalculation(
                     withNeighbors: Array(
-                        markedPeers.map({ $0.id })
+                        markedPeers.map({ $0 })
                     )
                 )
             } label: {
