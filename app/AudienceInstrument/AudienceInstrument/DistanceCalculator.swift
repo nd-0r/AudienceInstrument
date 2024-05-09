@@ -284,8 +284,17 @@ fileprivate struct _DistanceCalculator {
             throw DistanceCalculatorError.audioSessionError("Could not get data sources for built-in microphone.")
         }
 
-        guard let newDataSource = dataSources.first(where: { $0.orientation == .back }),
-              let omniPolarPattern = newDataSource.supportedPolarPatterns?.first(where: { $0 == .omnidirectional }) else {
+        guard let newDataSource = dataSources.first(where: { $0.orientation == .back }) else {
+            #if DEBUG
+            print(String(describing: dataSources))
+            #endif
+            throw DistanceCalculatorError.unsupportedDevice("Device does not have back microphone.")
+        }
+
+        guard let omniPolarPattern = newDataSource.supportedPolarPatterns?.first(where: { $0 == .subcardioid }) else {
+            #if DEBUG
+            print(String(describing: newDataSource.supportedPolarPatterns))
+            #endif
             throw DistanceCalculatorError.unsupportedDevice("Device does not have back microphone with an omnidirectional polar pattern.")
         }
 

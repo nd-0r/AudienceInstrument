@@ -65,16 +65,16 @@ struct PeerDistanceCalculationView: View {
                         clientName: peerID.displayName,
                         clientDistanceInM: estimatedDists[peerID.id] ?? nil,
                         didMarkCallback: {
-                            if markedPeers.contains(peerID.id) {
-                                markedPeers.remove(peerID.id)
-                                errorMessage = ""
-                            } else if markedPeers.count < 3 {
-                                markedPeers.insert(peerID.id)
+                            if self.markedPeers.contains(peerID.id) {
+                                self.markedPeers.remove(peerID.id)
+                                self.errorMessage = ""
+                            } else if self.markedPeers.count < 3 {
+                                self.markedPeers.insert(peerID.id)
                             } else {
-                                errorMessage = "Cannot calculate distance to more than 3 neighbors."
+                                self.errorMessage = "Cannot calculate distance to more than 3 neighbors."
                             }
                         },
-                        marked: markedPeers.contains(peerID.id)
+                        marked: self.markedPeers.contains(peerID.id)
                     )
                 }
             }

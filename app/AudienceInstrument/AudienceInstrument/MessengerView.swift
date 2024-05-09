@@ -14,16 +14,12 @@ struct MessengerView: View {
         VStack {
             ScrollView {
                 ForEach(Array(connectionManagerModel.allNodes.filter( { $1.available == true }).keys), id: \.self) { key in
-                    NavigationLink(destination: ChatView(
-                        messageManager: connectionManagerModel.allNodes[key]!
-                    )) {
-                        HStack {
-                            Spacer()
-                            Text(String(format:"%0X", key))
-                                .foregroundStyle(.black)
-                            Spacer()
-                        }
+                    NavigationLink(String(format:"%0X", key)) {
+                        ChatView(
+                            messageManager: connectionManagerModel.allNodes[key]!
+                        )
                     }
+                    .foregroundStyle(.black)
                     .padding()
                     .buttonStyle(.bordered)
                     .controlSize(.large)
@@ -32,22 +28,22 @@ struct MessengerView: View {
             if connectionManagerModel.sessionPeers.filter({ $1 == .connected }).count > 0 {
                 Spacer()
                 HStack {
-                    NavigationLink(destination: PeerDistanceCalculationView().environmentObject(connectionManagerModel)) {
-                        Text("Calculate Distances")
-                            .foregroundStyle(.blue)
-                            .bold()
-                            .padding()
+                    NavigationLink("Calculate Distances") {
+                        PeerDistanceCalculationView().environmentObject(connectionManagerModel)
                     }
+                    .padding()
+                    .bold()
+                    .foregroundStyle(.blue)
                 }
             }
             Spacer()
             HStack {
-                NavigationLink(destination: PeerConnectionView().environmentObject(connectionManagerModel)) {
-                    Text("Connect")
-                        .foregroundStyle(.blue)
-                        .bold()
-                        .padding()
+                NavigationLink("Connect") {
+                    PeerConnectionView().environmentObject(connectionManagerModel)
                 }
+                .foregroundStyle(.blue)
+                .bold()
+                .padding()
             }
         }
     }
