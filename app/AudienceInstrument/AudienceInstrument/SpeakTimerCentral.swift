@@ -33,12 +33,14 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         )
         case sendingSpeak(
             CBCharacteristic?,
-            bytesWritten: BluetoothService.LengthPrefixType
+            bytesWritten: BluetoothService.LengthPrefixType,
+            timeStartedSendingSpeak: UInt64?
         )
         case receivingSpoke(
             CBCharacteristic?,
             LengthMessageState,
             bytesToRead: BluetoothService.LengthPrefixType,
+            timeStartedSendingSpeak: UInt64,
             timeStartedReceiving: UInt64?
         )
     }
@@ -113,6 +115,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         #if DEBUG
         print("Starting protocol")
         #endif
+
+        // TODO: maybe handle error
+        try! self.distanceCalculator?.listen()
 
         for peripheral in discoveredPeripherals {
             self.startProtocolForPeripheral(peripheral)
@@ -373,6 +378,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             _,
             _,
             bytesToRead: let tmpBytesToRead,
+            timeStartedSendingSpeak: let _,
             timeStartedReceiving: let timeStartedReceivingSpoke
         ):
             bytesToRead = min(tmpBytesToRead, BluetoothService.LengthPrefixType(data.count))
@@ -418,6 +424,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
         // only do something for sending states
         let characteristic: CBCharacteristic?
         let bufBytesWritten: BluetoothService.LengthPrefixType
+        var timeStartedSending: UInt64? = nil
 
         switch state {
         case .sendingAck(
@@ -431,10 +438,12 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             bufBytesWritten = tmpBytesWritten
         case .sendingSpeak(
             let tmpCharacteristic,
-            bytesWritten: let tmpBytesWritten
+            bytesWritten: let tmpBytesWritten,
+            timeStartedSendingSpeak: let timeStartedSendingSpeak
         ):
             characteristic = tmpCharacteristic
             bufBytesWritten = tmpBytesWritten
+            timeStartedSending = timeStartedSendingSpeak ?? getCurrentTimeInNs()
         default:
             return // Not in a state where writing is necessary
         }
@@ -462,7 +471,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             currPeripheralState: state,
             currPeripheralBuffers: &buffers,
             numBytesReadOrWritten: BluetoothService.LengthPrefixType(bytesWritten),
-            opStartTime: nil,
+            opStartTime: timeStartedSending,
             canSendWrite: peripheral.canSendWriteWithoutResponse
         )
     }
@@ -625,15 +634,21 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
 
                 if pingRoundIdx + 1 >= self.expectedNumPingRoundsPerPeripheral {
                     // transition to speaking
+                    /* Moved this to `startProtocol` to give the audio engine more time to set up
                     // TODO: maybe handle error
                     try! self.distanceCalculator?.listen()
+                    */
 
                     self.serializeSpeak(
                         sendBuffer: &buffers.sendBuffer,
                         tmpBuffer: &buffers.tmpBuffer
                     )
 
-                    newState = .sendingSpeak(characteristic, bytesWritten: 0)
+                    newState = .sendingSpeak(
+                        characteristic,
+                        bytesWritten: 0,
+                        timeStartedSendingSpeak: nil
+                    )
 
                     if canSendWrite {
                         nextStateAction = .write
@@ -663,20 +678,34 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                     nextStateAction = .write
                 }
             }
-        case .sendingSpeak(let characteristic, bytesWritten: var bytesWritten):
+        case .sendingSpeak(
+            let characteristic,
+            bytesWritten: var bytesWritten,
+            timeStartedSendingSpeak: var timeStartedSendingSpeak
+        ):
             bytesWritten += numBytes
+
+            if timeStartedSendingSpeak == nil {
+                timeStartedSendingSpeak = opStartTime!
+            }
+
             if bytesWritten >= buffers.sendBuffer.count {
                 newState = .receivingSpoke(
                     characteristic,
                     .length,
                     bytesToRead: BluetoothService.lengthPrefixSize,
+                    timeStartedSendingSpeak: timeStartedSendingSpeak!,
                     timeStartedReceiving: nil
                 )
 
                 buffers.readBuffer.removeAll(keepingCapacity: true)
                 // wait for more data
             } else {
-                newState = .sendingSpeak(characteristic, bytesWritten: bytesWritten)
+                newState = .sendingSpeak(
+                    characteristic,
+                    bytesWritten: bytesWritten,
+                    timeStartedSendingSpeak: timeStartedSendingSpeak
+                )
 
                 if canSendWrite {
                     nextStateAction = .write
@@ -686,6 +715,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             let characteristic,
             let lengthMessageState,
             bytesToRead: var bytesToRead,
+            timeStartedSendingSpeak: let timeStartedSendingSpeak,
             timeStartedReceiving: var timeStartedReceiving
         ):
             bytesToRead -= numBytes
@@ -707,6 +737,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         characteristic,
                         .message,
                         bytesToRead: bytesToRead,
+                        timeStartedSendingSpeak: timeStartedSendingSpeak,
                         timeStartedReceiving: timeStartedReceiving
                     )
                 } else {
@@ -714,6 +745,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         characteristic,
                         .length,
                         bytesToRead: bytesToRead,
+                        timeStartedSendingSpeak: timeStartedSendingSpeak,
                         timeStartedReceiving: timeStartedReceiving
                     )
                 }
@@ -733,6 +765,13 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                             ]
                         )
 
+//                    self.calcLatencyForPeer(
+//                        peer: spokeMessage.spoke.from,
+//                        lastPingRecvTimeInNS: timeStartedSendingSpeak,
+//                        pingRecvTimeInNS: timeStartedReceiving!,
+//                        delayAtPeripheralInNS: spokeMessage.spoke.delayInNs
+//                    )
+
                     let peerLatency = self.latencyByPeer[spokeMessage.spoke.from]!
                     try! self.distanceCalculator?.heardPeerSpeak(
                         peer: spokeMessage.spoke.from,
@@ -749,6 +788,7 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
                         characteristic,
                         .message,
                         bytesToRead: bytesToRead,
+                        timeStartedSendingSpeak: timeStartedSendingSpeak,
                         timeStartedReceiving: timeStartedReceiving
                     )
 
@@ -817,9 +857,9 @@ class SpeakTimerCentral: NSObject, SpeakTimerDelegate {
             pingRecvTimeInNS: recvTime,
             delayAtPeripheralInNS: delay
         )
-        #if DEBUG
+
+        print("Delay at peripheral: \(delay)")
         print("Latency: \(Double(self.latencyByPeer[peer]!) / Double(NSEC_PER_MSEC))")
-        #endif
     }
 
 // MARK: - cleanup functions

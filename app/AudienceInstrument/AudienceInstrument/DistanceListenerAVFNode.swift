@@ -623,6 +623,8 @@ class DistanceListener {
         }
     }
 
+    /// Source: https://developer.apple.com/documentation/accelerate/applying_biquadratic_filters_to_a_music_loop
+    // MARK: - begin source
     private static func makeHighpass(frequency: Float,
                                      Q: Float,
                                      dbGain: Float,
@@ -649,6 +651,7 @@ class DistanceListener {
 
         return vDSP_biquad_CreateSetup(vDSP.floatToDouble(sectionCoeffs), DistanceListener.biquadSectionCount)!
     }
+    // MARK: - end source
 
     // MARK: CONSTANTS
     private let constants: Constants

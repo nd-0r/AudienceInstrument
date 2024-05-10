@@ -12,10 +12,10 @@ import Darwin.Mach
 
 @MainActor
 protocol ConnectionManagerModelProtocol: ObservableObject {
-    var sessionPeers: [MCPeerID:MCSessionState] { get set }
+    var sessionPeers: [ConnectionManager.PeerId] { get set }
+    var sessionPeersState: [ConnectionManager.PeerId : MCSessionState] { get set }
     var allNodes: [ConnectionManager.PeerId:NodeMessageManager] { get set }
     var estimatedLatencyByPeerInNs: [DistanceManager.PeerID:UInt64] { get set }
-    var sessionPeersByPeerID: [DistanceManager.PeerID:MCPeerID] { get set }
 }
 
 extension ForwardingEntry: ForwardingEntryProtocol {
@@ -59,6 +59,7 @@ actor ConnectionManager:
     typealias PeerId = UInt64
     typealias Cost = UInt64
 
+    private var didBrowse: Bool = false
     private var _connectionManagerModel: (any ConnectionManagerModelProtocol)? = nil
     var connectionManagerModel: (any ConnectionManagerModelProtocol)? {
         set {
@@ -78,13 +79,16 @@ actor ConnectionManager:
 
     // Peer properties
     private var storedPeers: [MCPeerID] = [] // Stored peers so that MPC doesn't deallocate them
-    internal var sessionsByPeer: [MCPeerID:MCSession] = [:]
-    internal var peersByHash: [PeerId:MCPeerID] = [:]
+    private var sessionsByPeer: [MCPeerID:MCSession] = [:]
+    private var peersByHash: [PeerId:MCPeerID] = [:]
     private var previouslyConnectedPeers: Set<MCPeerID> = Set()
     // End peer properties
 
     nonisolated private let debugUI: Bool
-    private(set) var selfId: MCPeerID
+    private var selfId: MCPeerID
+    var selfID: PeerId {
+        get { return self.selfId.id }
+    }
 
     private var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>? = nil
 
@@ -195,61 +199,76 @@ actor ConnectionManager:
         print("STOPPED BROWSING")
     }
 
-    public func connect(toPeer peer: MCPeerID) async {
+    public func connect(toPeer peer: PeerId) async {
         guard let model = connectionManagerModel else {
             print("MODEL DEINITIALIZED")
             return
         }
 
         // Make sure peer is discovered but not connected
-        guard await model.sessionPeers[peer] == MCSessionState.notConnected else {
+        guard await model.sessionPeersState[peer] == MCSessionState.notConnected else {
             print("TRIED TO CONNECT TO PEER IN NOT NOT CONNECTED STATE.")
             return
         }
 
         print("INVITING OTHER PEER TO SESSION")
+        guard let mcPeerID = self.peersByHash[peer] else {
+            print("TRIED TO CONNECT TO PEER WITHOUT RECORDED HASH")
+            return
+        }
 
-        var session = sessionsByPeer[peer]
+        var session = sessionsByPeer[mcPeerID]
         if session == nil {
             session = MCSession(peer: selfId)
             session!.delegate = self
-            storedPeers.append(peer)
-            sessionsByPeer[peer] = session
+            storedPeers.append(mcPeerID)
+            sessionsByPeer[mcPeerID] = session
+        }
+
+
+        if !self.didBrowse {
+            browser!.stopBrowsingForPeers()
+            self.didBrowse = true
         }
 
         browser!.invitePeer(
-            peer,
+            mcPeerID,
             to: session!,
             withContext: nil /* TODO */,
             timeout: TimeInterval(30.0)
         )
     }
 
-    public func disconnect(fromPeer peer: MCPeerID) async {
+    public func disconnect(fromPeer peer: PeerId) async {
         guard let model = connectionManagerModel else {
             print("MODEL DEINITIALIZED")
             return
         }
 
-        guard await model.sessionPeers[peer] != nil else {
+        guard await model.sessionPeersState[peer] != nil else {
             print("TRIED TO DISCONNECT FROM PEER NOT DISCOVERED.")
             return
         }
 
-        if let session = self.sessionsByPeer[peer] {
-            session.disconnect()
-            self.storedPeers.removeAll(where: { $0 == peer })
-            self.sessionsByPeer.removeValue(forKey: peer)
+        guard let mcPeerID = self.peersByHash[peer] else {
+            print("TRIED TO DISCONNECT FROM PEER WITHOUT RECORDED HASH")
+            return
         }
-        self.peersByHash.removeValue(forKey: peer.id)
+
+        if let session = self.sessionsByPeer[mcPeerID] {
+            session.disconnect()
+            self.storedPeers.removeAll(where: { $0 == mcPeerID })
+            self.sessionsByPeer.removeValue(forKey: mcPeerID)
+        }
+        self.peersByHash.removeValue(forKey: peer)
 
         DispatchQueue.main.async {
-            model.allNodes.removeValue(forKey: peer.id)
-            model.sessionPeers.removeValue(forKey: peer)
-            model.sessionPeersByPeerID.removeValue(forKey: peer.id)
+            model.allNodes.removeValue(forKey: peer)
+            model.sessionPeers.removeAll(where: { $0 == peer })
+            model.sessionPeersState.removeValue(forKey: peer)
         }
 
-        try! await self.routingNode?.updateLinkCost(linkId: peer.id, newCost: nil)
+        try! await self.routingNode?.updateLinkCost(linkId: peer, newCost: nil)
     }
 
     // FIXME: Move messenger stuff out of connection manager
@@ -300,42 +319,48 @@ actor ConnectionManager:
         didChange state: MCSessionState
     ) {
         Task {
-            let peerID = mcPeerID
+            let peerID = mcPeerID.id
 
             guard let model = await connectionManagerModel else {
                 print("MODEL DEINITIALIZED")
                 return
             }
 
-            guard await peersByHash.contains(where: { $0.value == peerID }) else {
+            guard await peersByHash.contains(where: { $0.value == mcPeerID }) else {
                 fatalError("Received session callback from peer which has not been discovered.")
             }
 
-            guard await sessionsByPeer[peerID] != nil else {
+            guard await sessionsByPeer[mcPeerID] != nil else {
                 fatalError("Session state changed for peer without a session.")
             }
 
-            print("Session state changed for \(peerID.displayName) from \(await model.sessionPeers[peerID]!) to \(state)")
+            print("Session state changed for \(mcPeerID.displayName) from \(await model.sessionPeersState[peerID]!) to \(state)")
 
             DispatchQueue.main.async { @MainActor in
-                model.sessionPeers[peerID] = state
+                #if DEBUG
+                print("\(#function): Updating state on connectionManagerModel for peer \(peerID)")
+                #endif
+                model.sessionPeersState[peerID] = state
+                #if DEBUG
+                print("\(#function): Finished updating state on connectionManagerModel for peer \(peerID)")
+                #endif
             }
 
             switch state {
             case .notConnected:
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: nil)
                 for neighborApp in neighborApps {
-                    await neighborApp.removePeers(peers: [ConnectionManager.PeerId(peerID.id)])
+                    await neighborApp.removePeers(peers: [ConnectionManager.PeerId(peerID)])
                 }
                 await self.disconnect(fromPeer: peerID)
             case .connecting:
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: nil)
             case .connected:
-                await addPreviouslyConnectedPeer(peerID: peerID)
+                await addPreviouslyConnectedPeer(peerID: mcPeerID)
                 for neighborApp in neighborApps {
-                    await neighborApp.addPeers(peers: [ConnectionManager.PeerId(peerID.id)])
+                    await neighborApp.addPeers(peers: [ConnectionManager.PeerId(peerID)])
                 }
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: 1 /* TODO */)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: 1 /* TODO */)
             @unknown default:
                 fatalError("Unkonwn peer state in ConnectionManager.session")
             }
@@ -355,7 +380,7 @@ actor ConnectionManager:
             }
 
             guard await peersByHash.contains(where: { $0.value == peerID }) &&
-                  model.sessionPeers[peerID] != nil else {
+                  model.sessionPeersState[peerID.id] != nil else {
                 fatalError("Received session callback from peer which has not been discovered.")
             }
 
@@ -468,7 +493,7 @@ actor ConnectionManager:
             }
 
             // Connection state must be empty or not connected
-            let state = await model.sessionPeers[peerID]
+            let state = await model.sessionPeersState[peerID.id]
             guard state == nil || state == MCSessionState.notConnected else {
                 return
             }
@@ -476,8 +501,10 @@ actor ConnectionManager:
             await updatePeersByHash(peerIDHash: peerID.id, peerID: peerID)
 
             DispatchQueue.main.async { @MainActor in
-                model.sessionPeers[peerID] = MCSessionState.notConnected
-                model.sessionPeersByPeerID[peerID.id] = peerID
+                if !model.sessionPeersState.contains(where: { $0.key == peerID.id } ) {
+                    model.sessionPeers.append(peerID.id)
+                }
+                model.sessionPeersState[peerID.id] = MCSessionState.notConnected
             }
 
             // Automatically reconnect if the peer was connected before
@@ -485,7 +512,7 @@ actor ConnectionManager:
                 #if DEBUG
                 print("RECONNECTING \(peerID.id)")
                 #endif
-                await self.connect(toPeer: peerID)
+                await self.connect(toPeer: peerID.id)
             }
         }
     }
@@ -502,7 +529,7 @@ actor ConnectionManager:
             print("LOST PEER")
 
             // TODO if this happens while the model is nil things could get messed up
-            await self.disconnect(fromPeer: peerID)
+            await self.disconnect(fromPeer: peerID.id)
         }
     }
 
@@ -540,7 +567,7 @@ actor ConnectionManager:
                 return
             }
 
-            guard await model.sessionPeers[peerID] == MCSessionState.notConnected else {
+            guard await model.sessionPeersState[peerID.id] == MCSessionState.notConnected else {
                 print("INVITED TO SESSION BUT ALREADY NOT NOT CONNECTED TO PEER")
                 return
             }
@@ -553,9 +580,6 @@ actor ConnectionManager:
             invitationHandler(true, newSession)
 
             await updatePeersByHash(peerIDHash: peerID.id, peerID: peerID)
-            DispatchQueue.main.async {
-                model.sessionPeersByPeerID[peerID.id] = peerID
-            }
         }
     }
 

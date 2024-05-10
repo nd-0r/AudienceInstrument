@@ -44,7 +44,16 @@ struct PeerDistanceCalculationView: View {
     @State var markedPeers: Set<DistanceManager.PeerID> = []
     @State var errorMessage = ""
 
+    init() {
+        #if DEBUG
+        print("Initializing \(String(describing: Self.self))")
+        #endif
+    }
+
     var body: some View {
+        #if DEBUG
+        let _ = print("Rendering \(String(describing: Self.self))")
+        #endif
         let estimatedDists = connectionManagerModel.estimatedDistanceByPeerInM.mapValues({
             val -> DistanceManager.DistInMeters? in
                 switch val {
@@ -54,27 +63,30 @@ struct PeerDistanceCalculationView: View {
                     return DistanceManager.DistInMeters(dist)
                 }
         })
+        #if DEBUG
+        let _ = print("Calculated estimatedDists \(String(describing: Self.self))")
+        #endif
         VStack {
             ScrollView {
                 ForEach(
-                    Array(connectionManagerModel.sessionPeers.keys),
+                    $connectionManagerModel.sessionPeers,
                     id: \.self
-                ) { peerID in
+                ) { $peerID in
                     PeerDistanceStatusView(
-                        status: connectionManagerModel.sessionPeers[peerID]!,
-                        clientName: peerID.displayName,
-                        clientDistanceInM: estimatedDists[peerID.id] ?? nil,
+                        status: connectionManagerModel.sessionPeersState[$peerID.wrappedValue]!,
+                        clientName: String(describing: $peerID.wrappedValue),
+                        clientDistanceInM: estimatedDists[$peerID.wrappedValue] ?? nil,
                         didMarkCallback: {
-                            if self.markedPeers.contains(peerID.id) {
-                                self.markedPeers.remove(peerID.id)
+                            if self.markedPeers.contains($peerID.wrappedValue) {
+                                self.markedPeers.remove($peerID.wrappedValue)
                                 self.errorMessage = ""
                             } else if self.markedPeers.count < 3 {
-                                self.markedPeers.insert(peerID.id)
+                                self.markedPeers.insert($peerID.wrappedValue)
                             } else {
                                 self.errorMessage = "Cannot calculate distance to more than 3 neighbors."
                             }
                         },
-                        marked: self.markedPeers.contains(peerID.id)
+                        marked: self.markedPeers.contains($peerID.wrappedValue)
                     )
                 }
             }
@@ -82,10 +94,9 @@ struct PeerDistanceCalculationView: View {
             Text("\(errorMessage)").foregroundStyle(.red)
             Button {
                 connectionManagerModel.initiateDistanceCalculation(
-                    withNeighbors: Array(
-                        markedPeers.map({ $0 })
-                    )
+                    withNeighbors: Array(markedPeers)
                 )
+                markedPeers.removeAll()
             } label: {
                 Text("Calculate Distances")
             }

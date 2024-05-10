@@ -102,6 +102,12 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
         DistanceManager.registerUpdateDelegate(delegate: self)
     }
 
+    deinit {
+        #if DEBUG
+        print("Deinitialized DistanceManagerNetworkModule!!!")
+        #endif
+    }
+
     func addPeers(peers: [DistanceManager.PeerID]) async {
         DistanceManager.addPeers(peers: peers)
     }
@@ -138,12 +144,23 @@ class DistanceManagerNetworkModule: NeighborMessageSender, NeighborMessageReceiv
     }
 
     func didUpdate(distancesByPeer: [DistanceManager.PeerID : DistanceManager.PeerDist]) {
+        #if DEBUG
+        print("\(#function): Received callback from DistanceManager")
+        #endif
         guard self.connectionManagerModel != nil else {
             return
         }
+        // TODO: remove
+        print("\(String(describing: distancesByPeer))")
 
-        Task { @MainActor in
+        DispatchQueue.main.async {
+            #if DEBUG
+            print("\(#function): Updating connectionManagerModel from DistanceManagerUpdateCallback")
+            #endif
             self.connectionManagerModel!.estimatedDistanceByPeerInM = distancesByPeer
+            #if DEBUG
+            print("\(#function): Finished updating connectionManagerModel from DistanceManagerUpdateCallback")
+            #endif
         }
     }
 
@@ -741,24 +758,48 @@ struct DistanceManager  {
         print("\(String(describing: Self.self)): Reset to done")
         #endif
         Self.cancelTimeouts()
+        #if DEBUG
+        print("\(#function): Cancelling timeouts")
+        #endif
         if !Self.peersInCurrentRound.isEmpty {
             for peer in Self.peersInCurrentRound {
                 Self.distanceCalculator!.deregisterPeer(peer: peer)
             }
             Self.peersInCurrentRound = []
         }
+        #if DEBUG
+        print("\(#function): Deregistered peers")
+        #endif
         Self.speakTimerDelegate?.resetProtocol()
+        #if DEBUG
+        print("\(#function): reset speakTimerDelegate")
+        #endif
         Self.spokeDelegate?.resetProtocol()
+        #if DEBUG
+        print("\(#function): reset spokeDelegate")
+        #endif
         Self.distanceCalculator?.reset()
+        #if DEBUG
+        print("\(#function): reset distanceCalculator")
+        #endif
         Self.initAckedPeers.removeAll()
+        #if DEBUG
+        print("\(#function): removing initAckedPeers")
+        #endif
         Self.dmState = .done
     }
 
     private static func calculateDistances() {
         let (peerIDs, calcDists): ([PeerID], [DistInMeters]) = Self.distanceCalculator!.calculateDistances()
+        #if DEBUG
+        print("\(#function): Calculated distances")
+        #endif
         for (peerID, calcDist) in zip(peerIDs, calcDists) {
             Self.distByPeer[peerID] = .someCalculated(calcDist)
         }
+        #if DEBUG
+        print("\(#function): Set distByPeer")
+        #endif
 
         let messages = calcDists.map({ calcDist in
             MessageWrapper.with {
@@ -774,7 +815,13 @@ struct DistanceManager  {
 
         if !messages.isEmpty {
             Self.sendDelegate?.send(toPeers: peerIDs, withMessages: messages, withReliability: .reliable)
+            #if DEBUG
+            print("\(#function): Sent done messages")
+            #endif
             Self.updateDelegate?.didUpdate(distancesByPeer: Self.distByPeer)
+            #if DEBUG
+            print("\(#function): Called update delegate")
+            #endif
         }
         Self.resetToDone()
     }

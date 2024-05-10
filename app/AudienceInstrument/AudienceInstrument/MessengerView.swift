@@ -25,7 +25,7 @@ struct MessengerView: View {
                     .controlSize(.large)
                 }
             }
-            if connectionManagerModel.sessionPeers.filter({ $1 == .connected }).count > 0 {
+            if connectionManagerModel.sessionPeersState.filter({ $1 == .connected }).count > 0 {
                 Spacer()
                 HStack {
                     NavigationLink("Calculate Distances") {

@@ -52,34 +52,21 @@ struct PeerConnectionView: View {
     var body: some View {
         ScrollView {
             ForEach(
-                Array(connectionManagerModel.sessionPeers.keys),
+                $connectionManagerModel.sessionPeers,
                 id: \.self
-            ) { mcPeerId in
+            ) { $mcPeerId in
                 PeerConnectionStatusView(
-                    status: connectionManagerModel.sessionPeers[mcPeerId]!,
-                    clientName: mcPeerId.displayName,
-                    clientLatencyInNs: connectionManagerModel.estimatedLatencyByPeerInNs[mcPeerId.id],
+                    status: connectionManagerModel.sessionPeersState[$mcPeerId.wrappedValue]!,
+                    clientName: String(describing: $mcPeerId.wrappedValue),
+                    clientLatencyInNs: connectionManagerModel.estimatedLatencyByPeerInNs[$mcPeerId.wrappedValue],
                     didSelectCallback: {
-                        connectionManagerModel.connect(toPeer: mcPeerId)
+                        connectionManagerModel.connect(toPeer: $mcPeerId.wrappedValue)
                     }
                 )
             }
         }
         .onAppear() {
             connectionManagerModel.startBrowsing()
-        }
-        .alert(isPresented: $connecting) {
-            Alert(
-                title: Text("Searching"),
-                message: Text("Searching for peers to connect to"),
-                dismissButton: Alert.Button.default(
-                    Text("Stop Searching"),
-                    action: {
-                        connecting = false
-                        connectionManagerModel.stopBrowsing()
-                    }
-                )
-            )
         }
     }
 }

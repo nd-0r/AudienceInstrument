@@ -21,10 +21,10 @@ import MultipeerConnectivity
 
 
     let sessionPeers = [
-        n[0]: MCSessionState.connected,
-        n[1]: MCSessionState.connecting,
-        n[2]: MCSessionState.notConnected,
-        n[6]: MCSessionState.notConnected
+        n[0].id: MCSessionState.connected,
+        n[1].id: MCSessionState.connecting,
+        n[2].id: MCSessionState.notConnected,
+        n[6].id: MCSessionState.notConnected
     ]
 
     let allNodes = [
@@ -186,7 +186,7 @@ extension BluetoothService {
         pingRecvTimeInNS recvTime: UInt64,
         delayAtPeripheralInNS delay: UInt64
     ) -> UInt64 {
-        let estOneWayLatency = ((recvTime - lastRecvTime) - delay)
+        let estOneWayLatency = ((recvTime - lastRecvTime) - delay) / 2
         return UInt64(
             Self.kEWMAFactor * Double(lastLatency ?? estOneWayLatency)
         ) + UInt64((1.0 - Self.kEWMAFactor) * Double(estOneWayLatency))

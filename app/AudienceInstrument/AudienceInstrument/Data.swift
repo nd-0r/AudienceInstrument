@@ -35,31 +35,31 @@ struct BluetoothService {
 }
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
-    @Published var sessionPeers: [MCPeerID : MCSessionState]
+    @Published var sessionPeers: [ConnectionManager.PeerId]
+    @Published var sessionPeersState: [ConnectionManager.PeerId : MCSessionState]
     @Published var allNodes: [ConnectionManager.PeerId : NodeMessageManager]
     @Published var estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64]
     @Published var estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist]
-    @Published var sessionPeersByPeerID: [DistanceManager.PeerID:MCPeerID]
     private let connectionManager: ConnectionManager!
     @Published var ready: Bool = false
     private let debugUI: Bool
+    private var speakTimerCentral: SpeakTimerCentral! = nil
+    private var spokePeripheral: SpokePeripheral! = nil
+    private var distanceCalculator: DistanceCalculator! = nil
+    private var distanceNeighborApp: DistanceManagerNetworkModule! = nil
 
     init(
-        sessionPeers: [MCPeerID : MCSessionState] = [:],
+        sessionPeers: [ConnectionManager.PeerId : MCSessionState] = [:],
         allNodes: [ConnectionManager.PeerId : NodeMessageManager] = [:],
         estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64] = [:],
         estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist] = [:],
         debugUI: Bool = false
     ) {
-        self.sessionPeers = sessionPeers
+        self.sessionPeersState = sessionPeers
+        self.sessionPeers = Array(sessionPeers.keys)
         self.allNodes = allNodes
         self.estimatedLatencyByPeerInNs = estimatedLatencyByPeerInNs
         self.estimatedDistanceByPeerInM = estimatedDistanceByPeerInM
-        self.sessionPeersByPeerID = Dictionary(
-            uniqueKeysWithValues: sessionPeers.map({
-                (k, _) in (k.id, k)
-            })
-        )
 
         self.debugUI = debugUI
         guard debugUI == false else {
@@ -67,7 +67,7 @@ struct BluetoothService {
             return
         }
 
-        let distanceNeighborApp = DistanceManagerNetworkModule()
+        self.distanceNeighborApp = DistanceManagerNetworkModule()
 
         let randomIDString = generatePeerIDString()
 
@@ -79,13 +79,13 @@ struct BluetoothService {
         distanceNeighborApp.connectionManagerModel = self
 
         Task { @MainActor in
-            let speakTimerCentral = SpeakTimerCentral(
-                selfID: await connectionManager.selfId.id
+            self.speakTimerCentral = SpeakTimerCentral(
+                selfID: await connectionManager.selfID
             )
-            let spokePeripheral = SpokePeripheral(
-                selfID: await connectionManager.selfId.id
+            self.spokePeripheral = SpokePeripheral(
+                selfID: await connectionManager.selfID
             )
-            let distanceCalculator = DistanceCalculator(
+            self.distanceCalculator = DistanceCalculator(
                 peerLatencyCalculator: nil
             )
 
@@ -97,7 +97,7 @@ struct BluetoothService {
 
             await connectionManager!.setConnectionManagerModel(newModel: self)
             await connectionManager!.startAdvertising()
-            ready = true
+            self.ready = true
         }
     }
 
@@ -143,7 +143,7 @@ struct BluetoothService {
         }
     }
 
-    public func connect(toPeer peer: MCPeerID) {
+    public func connect(toPeer peer: ConnectionManager.PeerId) {
         guard debugUI == false else {
             return
         }
@@ -155,7 +155,7 @@ struct BluetoothService {
         }
     }
 
-    public func disconnect(fromPeer peer: MCPeerID) {
+    public func disconnect(fromPeer peer: ConnectionManager.PeerId) {
         guard debugUI == false else {
             return
         }

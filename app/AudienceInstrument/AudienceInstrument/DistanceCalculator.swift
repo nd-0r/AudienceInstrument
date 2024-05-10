@@ -92,8 +92,9 @@ fileprivate struct _DistanceCalculator {
             return
         }
 
-        let peerFreqIdx = Self.peersByFreq.firstIndex(where: { $1 == peer })
-        Self.peersByFreq.remove(at: peerFreqIdx!)
+        if let peerFreqIdx = Self.peersByFreq.firstIndex(where: { $1 == peer }) {
+            Self.peersByFreq.remove(at: peerFreqIdx)
+        }
         Self.estSpokeTimeByPeer[peer] = nil
     }
     
@@ -124,7 +125,7 @@ fileprivate struct _DistanceCalculator {
         withOneWayLatency oneWayLatency: UInt64
     ) {
         #if DEBUG
-        print("\(typeName): Heard peer speak message")
+        print("===>\(typeName): Heard peer speak message. recvTime(ns): \(recvTimeInNS) oneWayLatency(ms): \(oneWayLatency / NSEC_PER_MSEC) reportedSpeakingDelay(ms): \(reportedSpeakingDelay / NSEC_PER_MSEC)<===")
         #endif
         Self.estSpokeTimeByPeer[peer] = recvTimeInNS - oneWayLatency - reportedSpeakingDelay
     }
@@ -168,7 +169,11 @@ fileprivate struct _DistanceCalculator {
                 continue
             }
 
-            let approxDist = Float(Double(recvTime - Self.estSpokeTimeByPeer[peer]!) / Self.speedOfSoundInMPerNS)
+            #if DEBUG
+            print("\(typeName): spokeTime(ns) \(Self.estSpokeTimeByPeer[peer]!) for peer \(peer)")
+            #endif
+
+            let approxDist = Float(Double(recvTime - Self.estSpokeTimeByPeer[peer]!) * Self.speedOfSoundInMPerNS)
 
             distances.append(approxDist)
         }
@@ -291,7 +296,7 @@ fileprivate struct _DistanceCalculator {
             throw DistanceCalculatorError.unsupportedDevice("Device does not have back microphone.")
         }
 
-        guard let omniPolarPattern = newDataSource.supportedPolarPatterns?.first(where: { $0 == .subcardioid }) else {
+        guard let omniPolarPattern = newDataSource.supportedPolarPatterns?.first(where: { $0 == .omnidirectional }) else {
             #if DEBUG
             print(String(describing: newDataSource.supportedPolarPatterns))
             #endif
@@ -310,7 +315,7 @@ fileprivate struct _DistanceCalculator {
     private static let expectedToneLen: TimeInterval = 1.0
     private static let calculateWaitTimeMultiplier: TimeInterval = 3.0
     // TODO: Would be nice to calculate this more precisely
-    private static let speedOfSoundInMPerNS: Double = 343.3 * Double(NSEC_PER_SEC)
+    private static let speedOfSoundInMPerNS: Double = 343.3 / Double(NSEC_PER_SEC)
     private static let listenerConstants = DistanceListener.Constants(
         highpassCutoff: 6000.0,
         highpassGain: -12,

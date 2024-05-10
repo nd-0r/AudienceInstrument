@@ -24,6 +24,7 @@
 		6B383ECB2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECA2BCB2556006E8F42 /* DistanceSpeakerAVFNode.swift */; };
 		6B383ECD2BCB951B006E8F42 /* RingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECC2BCB951B006E8F42 /* RingBuffer.swift */; };
 		6B383ECF2BCB9CE5006E8F42 /* RingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B383ECE2BCB9CE5006E8F42 /* RingBufferTests.swift */; };
+		6B58DC692BEDC3AB000358BA /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = 6B58DC682BEDC3AB000358BA /* Collections */; };
 		6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; };
 		6B5E02E02BABFBA300F72BA8 /* SWIMNet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6B5E02DD2BABFB4B00F72BA8 /* SWIMNet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6B6C71EA2BC225240094E152 /* DistanceManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6C71E92BC225240094E152 /* DistanceManagerTests.swift */; };
@@ -115,6 +116,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6B58DC692BEDC3AB000358BA /* Collections in Frameworks */,
 				6B5E02DF2BABFBA300F72BA8 /* SWIMNet.xcframework in Frameworks */,
 				6B8E6F8E2BBA80AE002B84AC /* SwiftProtobuf in Frameworks */,
 			);
@@ -260,6 +262,7 @@
 			name = AudienceInstrument;
 			packageProductDependencies = (
 				6B8E6F8D2BBA80AE002B84AC /* SwiftProtobuf */,
+				6B58DC682BEDC3AB000358BA /* Collections */,
 			);
 			productName = MeshNetworkTest;
 			productReference = 6B75AF8E2BA4E058002A7893 /* AudienceInstrument.app */;
@@ -296,6 +299,7 @@
 			packageReferences = (
 				6B8E6F8C2BBA80AE002B84AC /* XCRemoteSwiftPackageReference "swift-protobuf" */,
 				6B6C71EB2BC252680094E152 /* XCRemoteSwiftPackageReference "mockingbird" */,
+				6B58DC672BEDC3AB000358BA /* XCRemoteSwiftPackageReference "swift-collections" */,
 			);
 			productRefGroup = 6B75AF8F2BA4E058002A7893 /* Products */;
 			projectDirPath = "";
@@ -661,6 +665,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		6B58DC672BEDC3AB000358BA /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 		6B6C71EB2BC252680094E152 /* XCRemoteSwiftPackageReference "mockingbird" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/birdrides/mockingbird";
@@ -680,6 +692,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6B58DC682BEDC3AB000358BA /* Collections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6B58DC672BEDC3AB000358BA /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = Collections;
+		};
 		6B6C71EC2BC252680094E152 /* Mockingbird */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6B6C71EB2BC252680094E152 /* XCRemoteSwiftPackageReference "mockingbird" */;
