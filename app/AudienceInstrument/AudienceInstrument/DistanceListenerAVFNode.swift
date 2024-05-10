@@ -610,8 +610,8 @@ class DistanceListener {
 
                 for sampleIdx in 0..<frameCount {
                     #if DEBUG
-                    guard self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)]) else {
-                        fatalError("Failed to push to sample buffer; consumer not fast enough!")
+                    if !self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)]) {
+                        print("Failed to push to sample buffer; consumer not fast enough!")
                     }
                     #else
                     self.sampleBuffer.pushFront(element: bufPtr[Int(sampleIdx)])

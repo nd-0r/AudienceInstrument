@@ -77,6 +77,7 @@ actor ConnectionManager:
     }
 
     // Peer properties
+    private var storedPeers: [MCPeerID] = [] // Stored peers so that MPC doesn't deallocate them
     internal var sessionsByPeer: [MCPeerID:MCSession] = [:]
     internal var peersByHash: [PeerId:MCPeerID] = [:]
     private var previouslyConnectedPeers: Set<MCPeerID> = Set()
@@ -85,7 +86,7 @@ actor ConnectionManager:
     nonisolated private let debugUI: Bool
     private(set) var selfId: MCPeerID
 
-    private var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>?
+    private var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>? = nil
 
     private let neighborApps: [any NeighborMessageSender & NeighborMessageReceiver]
 
@@ -115,12 +116,13 @@ actor ConnectionManager:
 
         let sendDelegate = DVNodeSendDelegate()
         let updateDelegate = NodeUpdateDelegate()
-        routingNode = DistanceVectorRoutingNode(
-            selfId: selfId.id,
-            dvUpdateThreshold: 1,
-            sendDelegate: sendDelegate,
-            updateDelegate: updateDelegate
-        )
+        // FIXME: uncomment
+//        routingNode = DistanceVectorRoutingNode(
+//            selfId: selfId.id,
+//            dvUpdateThreshold: 1,
+//            sendDelegate: sendDelegate,
+//            updateDelegate: updateDelegate
+//        )
 
         browser = MCNearbyServiceBrowser(
             peer: selfId,
@@ -211,6 +213,7 @@ actor ConnectionManager:
         if session == nil {
             session = MCSession(peer: selfId)
             session!.delegate = self
+            storedPeers.append(peer)
             sessionsByPeer[peer] = session
         }
 
@@ -235,6 +238,7 @@ actor ConnectionManager:
 
         if let session = self.sessionsByPeer[peer] {
             session.disconnect()
+            self.storedPeers.removeAll(where: { $0 == peer })
             self.sessionsByPeer.removeValue(forKey: peer)
         }
         self.peersByHash.removeValue(forKey: peer.id)
@@ -245,9 +249,7 @@ actor ConnectionManager:
             model.sessionPeersByPeerID.removeValue(forKey: peer.id)
         }
 
-        Task {
-            try await self.routingNode!.updateLinkCost(linkId: peer.id, newCost: nil)
-        }
+        try! await self.routingNode?.updateLinkCost(linkId: peer.id, newCost: nil)
     }
 
     // FIXME: Move messenger stuff out of connection manager
@@ -260,7 +262,7 @@ actor ConnectionManager:
             return
         }
 
-        guard let (nextHop, _) = await self.routingNode!.getLinkForDest(dest: peerId) else {
+        guard let (nextHop, _) = await self.routingNode?.getLinkForDest(dest: peerId) else {
             print("NEXT HOP DOES NOT EXIST FOR DESTINATION.")
             return
         }
@@ -294,10 +296,12 @@ actor ConnectionManager:
 
     nonisolated func session(
         _ session: MCSession,
-        peer peerID: MCPeerID,
+        peer mcPeerID: MCPeerID,
         didChange state: MCSessionState
     ) {
         Task {
+            let peerID = mcPeerID
+
             guard let model = await connectionManagerModel else {
                 print("MODEL DEINITIALIZED")
                 return
@@ -319,18 +323,19 @@ actor ConnectionManager:
 
             switch state {
             case .notConnected:
-                try await self.routingNode!.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
                 for neighborApp in neighborApps {
                     await neighborApp.removePeers(peers: [ConnectionManager.PeerId(peerID.id)])
                 }
+                await self.disconnect(fromPeer: peerID)
             case .connecting:
-                try await self.routingNode!.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: nil)
             case .connected:
                 await addPreviouslyConnectedPeer(peerID: peerID)
                 for neighborApp in neighborApps {
                     await neighborApp.addPeers(peers: [ConnectionManager.PeerId(peerID.id)])
                 }
-                try await self.routingNode!.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: 1 /* TODO */)
+                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID.id), newCost: 1 /* TODO */)
             @unknown default:
                 fatalError("Unkonwn peer state in ConnectionManager.session")
             }
@@ -361,7 +366,7 @@ actor ConnectionManager:
             switch message.data! {
             case .networkMessage(let networkMessage):
                 print("RECEIVED DV \(networkMessage.distanceVector)")
-                await self.routingNode!.recvDistanceVector(
+                await self.routingNode?.recvDistanceVector(
                     fromNeighbor: peerID.id,
                     withDistanceVector: networkMessage.distanceVector
                 )
@@ -477,6 +482,9 @@ actor ConnectionManager:
 
             // Automatically reconnect if the peer was connected before
             if await self.previouslyConnectedPeers.contains(peerID) {
+                #if DEBUG
+                print("RECONNECTING \(peerID.id)")
+                #endif
                 await self.connect(toPeer: peerID)
             }
         }
@@ -594,8 +602,9 @@ actor ConnectionManager:
             guard messages.count == peers.count else {
                 #if DEBUG
                 fatalError("SendDelegate: Number of messages for multi-message send not equal to number of peers!")
-                #endif
+                #else
                 return
+                #endif
             }
 
             for i in 0..<peers.count {

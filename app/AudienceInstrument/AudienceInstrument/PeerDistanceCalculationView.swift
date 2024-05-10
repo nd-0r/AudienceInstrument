@@ -24,11 +24,11 @@ struct PeerDistanceStatusView: View {
                 Text(clientName)
                     .foregroundStyle(.blue)
                 Spacer()
-                if clientDistanceInM != nil {
-                    Text("\(String(format: "%.2f", clientDistanceInM!))m")
-                    .foregroundStyle(.blue)
-                    Spacer()
-                }
+//                if clientDistanceInM != nil {
+//                    Text("\(String(format: "%.2f", clientDistanceInM!))m")
+//                    .foregroundStyle(.blue)
+//                    Spacer()
+//                }
             }
         }
         .tint(marked ? .green : .gray)
