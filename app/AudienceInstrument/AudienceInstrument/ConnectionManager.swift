@@ -12,9 +12,9 @@ import Darwin.Mach
 
 @MainActor
 protocol ConnectionManagerModelProtocol: ObservableObject {
-    var sessionPeers: [ConnectionManager.PeerId] { get set }
-    var sessionPeersState: [ConnectionManager.PeerId : MCSessionState] { get set }
-    var allNodes: [ConnectionManager.PeerId:NodeMessageManager] { get set }
+    var sessionPeers: [DistanceManager.PeerID] { get set }
+    var sessionPeersState: [DistanceManager.PeerID : MCSessionState] { get set }
+    var allNodes: [DistanceManager.PeerID:NodeMessageManager] { get set }
     var estimatedLatencyByPeerInNs: [DistanceManager.PeerID:UInt64] { get set }
 }
 
@@ -32,21 +32,21 @@ extension ForwardingEntry: ForwardingEntryProtocol {
 protocol NeighborMessageReceiver {
     func receiveMessage(
         message: NeighborAppMessage,
-        from: ConnectionManager.PeerId,
+        from: DistanceManager.PeerID,
         receivedAt: UInt64
     ) async throws
 }
 
 protocol NeighborMessageSendDelegate {
     // Same TODO: PeerID type should be somewhere else
-    func send(toPeers: [ConnectionManager.PeerId], withMessages: [MessageWrapper], withReliability: MCSessionSendDataMode)
-    func send(toPeers: [ConnectionManager.PeerId], withMessage: MessageWrapper, withReliability: MCSessionSendDataMode)
+    func send(toPeers: [DistanceManager.PeerID], withMessages: [MessageWrapper], withReliability: MCSessionSendDataMode)
+    func send(toPeers: [DistanceManager.PeerID], withMessage: MessageWrapper, withReliability: MCSessionSendDataMode)
 }
 
 protocol NeighborMessageSender {
-    func registerSendDelegate(delegate: any NeighborMessageSendDelegate, selfID: ConnectionManager.PeerId) async
-    func addPeers(peers: [ConnectionManager.PeerId]) async
-    func removePeers(peers: [ConnectionManager.PeerId]) async
+    func registerSendDelegate(delegate: any NeighborMessageSendDelegate, selfID: DistanceManager.PeerID) async
+    func addPeers(peers: [DistanceManager.PeerID]) async
+    func removePeers(peers: [DistanceManager.PeerID]) async
 }
 
 /// Important to only set connection manager model once and to start advertising/browsing _after_ model is set
@@ -56,7 +56,6 @@ actor ConnectionManager:
     MCNearbyServiceBrowserDelegate,
     MCNearbyServiceAdvertiserDelegate
 {
-    typealias PeerId = UInt64
     typealias Cost = UInt64
 
     private var didBrowse: Bool = false
@@ -80,17 +79,17 @@ actor ConnectionManager:
     // Peer properties
     private var storedPeers: [MCPeerID] = [] // Stored peers so that MPC doesn't deallocate them
     private var sessionsByPeer: [MCPeerID:MCSession] = [:]
-    private var peersByHash: [PeerId:MCPeerID] = [:]
+    private var peersByHash: [DistanceManager.PeerID:MCPeerID] = [:]
     private var previouslyConnectedPeers: Set<MCPeerID> = Set()
     // End peer properties
 
     nonisolated private let debugUI: Bool
     private var selfId: MCPeerID
-    var selfID: PeerId {
+    var selfID: DistanceManager.PeerID {
         get { return self.selfId.id }
     }
 
-    private var routingNode: DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>? = nil
+    private var routingNode: DistanceVectorRoutingNode<DistanceManager.PeerID, Cost, DVNodeSendDelegate, ForwardingEntry>? = nil
 
     private let neighborApps: [any NeighborMessageSender & NeighborMessageReceiver]
 
@@ -151,7 +150,7 @@ actor ConnectionManager:
             for neighborApp in neighborApps {
                 await neighborApp.registerSendDelegate(
                     delegate: sendDelegate,
-                    selfID: ConnectionManager.PeerId(self.selfId.id)
+                    selfID: DistanceManager.PeerID(self.selfId.id)
                 )
             }
         }
@@ -199,7 +198,7 @@ actor ConnectionManager:
         print("STOPPED BROWSING")
     }
 
-    public func connect(toPeer peer: PeerId) async {
+    public func connect(toPeer peer: DistanceManager.PeerID) async {
         guard let model = connectionManagerModel else {
             print("MODEL DEINITIALIZED")
             return
@@ -239,7 +238,7 @@ actor ConnectionManager:
         )
     }
 
-    public func disconnect(fromPeer peer: PeerId) async {
+    public func disconnect(fromPeer peer: DistanceManager.PeerID) async {
         guard let model = connectionManagerModel else {
             print("MODEL DEINITIALIZED")
             return
@@ -273,7 +272,7 @@ actor ConnectionManager:
 
     // FIXME: Move messenger stuff out of connection manager
     public func send(
-        toPeer peerId: PeerId,
+        toPeer peerId: DistanceManager.PeerID,
         message: String,
         with reliability: MCSessionSendDataMode
     ) async throws {
@@ -348,19 +347,19 @@ actor ConnectionManager:
 
             switch state {
             case .notConnected:
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: DistanceManager.PeerID(peerID), newCost: nil)
                 for neighborApp in neighborApps {
-                    await neighborApp.removePeers(peers: [ConnectionManager.PeerId(peerID)])
+                    await neighborApp.removePeers(peers: [DistanceManager.PeerID(peerID)])
                 }
                 await self.disconnect(fromPeer: peerID)
             case .connecting:
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: nil)
+                try await self.routingNode?.updateLinkCost(linkId: DistanceManager.PeerID(peerID), newCost: nil)
             case .connected:
                 await addPreviouslyConnectedPeer(peerID: mcPeerID)
                 for neighborApp in neighborApps {
-                    await neighborApp.addPeers(peers: [ConnectionManager.PeerId(peerID)])
+                    await neighborApp.addPeers(peers: [DistanceManager.PeerID(peerID)])
                 }
-                try await self.routingNode?.updateLinkCost(linkId: ConnectionManager.PeerId(peerID), newCost: 1 /* TODO */)
+                try await self.routingNode?.updateLinkCost(linkId: DistanceManager.PeerID(peerID), newCost: 1 /* TODO */)
             @unknown default:
                 fatalError("Unkonwn peer state in ConnectionManager.session")
             }
@@ -398,7 +397,7 @@ actor ConnectionManager:
             case .neighborAppMessage(let appMessage):
                 for neighborApp in neighborApps {
                     do {
-                        try await neighborApp.receiveMessage(message: appMessage, from: ConnectionManager.PeerId(peerID.id), receivedAt: recvTime)
+                        try await neighborApp.receiveMessage(message: appMessage, from: DistanceManager.PeerID(peerID.id), receivedAt: recvTime)
                     } catch {
                         print("Failed receiving message at neighbor app: \(error).")
                     }
@@ -600,7 +599,7 @@ actor ConnectionManager:
             sendTo peerId: any SWIMNet.PeerIdT,
             withDVDict dv: any Sendable
         ) async throws {
-            guard let peerId = await self.owner!.peersByHash[peerId as! PeerId] else {
+            guard let peerId = await self.owner!.peersByHash[peerId as! DistanceManager.PeerID] else {
                 fatalError("TRIED TO SEND DISTANCE VECTOR TO UNDISCOVERED PEER")
             }
 
@@ -610,7 +609,7 @@ actor ConnectionManager:
 
             let data = try! MessageWrapper.with {
                 $0.data = .networkMessage(NetworkMessage.with {
-                    $0.distanceVector = (dv as! DistanceVectorRoutingNode<PeerId, Cost, DVNodeSendDelegate, ForwardingEntry>.DistanceVector)
+                    $0.distanceVector = (dv as! DistanceVectorRoutingNode<DistanceManager.PeerID, Cost, DVNodeSendDelegate, ForwardingEntry>.DistanceVector)
                 })
             }.serializedData()
 
@@ -622,7 +621,7 @@ actor ConnectionManager:
         }
 
         // TODO: These functions are kind of stupid
-        func send(toPeers peers: [ConnectionManager.PeerId], withMessages messages: [MessageWrapper], withReliability reliability: MCSessionSendDataMode) {
+        func send(toPeers peers: [DistanceManager.PeerID], withMessages messages: [MessageWrapper], withReliability reliability: MCSessionSendDataMode) {
             guard messages.count == peers.count else {
                 #if DEBUG
                 fatalError("SendDelegate: Number of messages for multi-message send not equal to number of peers!")
@@ -636,7 +635,7 @@ actor ConnectionManager:
             }
         }
         
-        func send(toPeers peers: [ConnectionManager.PeerId], withMessage message: MessageWrapper, withReliability reliability: MCSessionSendDataMode) {
+        func send(toPeers peers: [DistanceManager.PeerID], withMessage message: MessageWrapper, withReliability reliability: MCSessionSendDataMode) {
             // TODO: figure out the different sessions thing
             Task {
                 for peer in peers {
@@ -688,20 +687,20 @@ actor ConnectionManager:
                     for node in newAvailableNodes {
                         // Don't include self
                         let ownerSelfId = await self.owner!.selfId.id
-                        guard (node as! PeerId) != ownerSelfId else {
+                        guard (node as! DistanceManager.PeerID) != ownerSelfId else {
                             continue
                         }
 
-                        if model.allNodes[node as! PeerId] == nil {
-                            model.allNodes[node as! PeerId] = NodeMessageManager(
-                                peerId: node as! PeerId,
+                        if model.allNodes[node as! DistanceManager.PeerID] == nil {
+                            model.allNodes[node as! DistanceManager.PeerID] = NodeMessageManager(
+                                peerId: node as! DistanceManager.PeerID,
                                 connectionManagerModel: await (self.owner!.connectionManagerModel! as? ConnectionManagerModel)
                             )
                         }
                     }
 
                     for (_, nodeMessageManager) in model.allNodes {
-                        if !newAvailableNodes.contains(where: { $0 as! PeerId == nodeMessageManager.peerId}) {
+                        if !newAvailableNodes.contains(where: { $0 as! DistanceManager.PeerID == nodeMessageManager.peerId}) {
                             nodeMessageManager.available = false
                         }
                     }

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4AE59AEFB65EFE46B6F71AAA /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */; };
+		0C0CC9BABABB9962CB8DD6B1 /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83F969BD10CA314E21930030 /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */; };
 		6B05ADD22BBDFDD100E99323 /* ConnectionManager.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADD12BBDFDD100E99323 /* ConnectionManager.pb.swift */; };
 		6B05ADE02BBDFE8D00E99323 /* Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADD52BBDFE8D00E99323 /* Data.swift */; };
 		6B05ADE12BBDFE8D00E99323 /* MessengerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B05ADD62BBDFE8D00E99323 /* MessengerView.swift */; };
@@ -100,6 +100,7 @@
 		6BF625DB2BD4FEF50029B7B9 /* test_3_tones_separate.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_3_tones_separate.wav; sourceTree = "<group>"; };
 		6BF625DC2BD4FEF50029B7B9 /* test_3_tones_same_time.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_3_tones_same_time.wav; sourceTree = "<group>"; };
 		6BF625DD2BD4FEF50029B7B9 /* test_1_tone.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test_1_tone.wav; sourceTree = "<group>"; };
+		83F969BD10CA314E21930030 /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; lastKnownFileType = sourcecode.swift; name = "AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; path = "MockingbirdMocks/AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; sourceTree = "<group>"; };
 		AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; name = "AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; path = "MockingbirdMocks/AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -216,7 +217,7 @@
 		F9680AB6E92A6D73EE1E94FA /* Generated Mocks */ = {
 			isa = PBXGroup;
 			children = (
-				AAE5F90BD28C3AC0860AE7FC /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */,
+				83F969BD10CA314E21930030 /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift */,
 			);
 			name = "Generated Mocks";
 			sourceTree = "<group>";
@@ -361,8 +362,8 @@
 				6BAEE58D2BCDF31E00370F6C /* DistanceListenerAVFNodeTests.swift in Sources */,
 				6BAEE58F2BCDF33B00370F6C /* DistanceSpeakerAVFNodeTests.swift in Sources */,
 				6B6C71EA2BC225240094E152 /* DistanceManagerTests.swift in Sources */,
-				4AE59AEFB65EFE46B6F71AAA /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */,
 				6B383ECF2BCB9CE5006E8F42 /* RingBufferTests.swift in Sources */,
+				0C0CC9BABABB9962CB8DD6B1 /* AudienceInstrumentTests-AudienceInstrumentMocks.generated.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

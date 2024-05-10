@@ -35,9 +35,9 @@ struct BluetoothService {
 }
 
 @MainActor final class ConnectionManagerModel: ConnectionManagerModelProtocol {
-    @Published var sessionPeers: [ConnectionManager.PeerId]
-    @Published var sessionPeersState: [ConnectionManager.PeerId : MCSessionState]
-    @Published var allNodes: [ConnectionManager.PeerId : NodeMessageManager]
+    @Published var sessionPeers: [DistanceManager.PeerID]
+    @Published var sessionPeersState: [DistanceManager.PeerID : MCSessionState]
+    @Published var allNodes: [DistanceManager.PeerID : NodeMessageManager]
     @Published var estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64]
     @Published var estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist]
     private let connectionManager: ConnectionManager!
@@ -49,8 +49,8 @@ struct BluetoothService {
     private var distanceNeighborApp: DistanceManagerNetworkModule! = nil
 
     init(
-        sessionPeers: [ConnectionManager.PeerId : MCSessionState] = [:],
-        allNodes: [ConnectionManager.PeerId : NodeMessageManager] = [:],
+        sessionPeers: [DistanceManager.PeerID : MCSessionState] = [:],
+        allNodes: [DistanceManager.PeerID : NodeMessageManager] = [:],
         estimatedLatencyByPeerInNs: [DistanceManager.PeerID : UInt64] = [:],
         estimatedDistanceByPeerInM: [DistanceManager.PeerID : DistanceManager.PeerDist] = [:],
         debugUI: Bool = false
@@ -62,7 +62,7 @@ struct BluetoothService {
         self.estimatedDistanceByPeerInM = estimatedDistanceByPeerInM
 
         self.debugUI = debugUI
-        guard debugUI == false else {
+        guard debugUI == false && isUnitTest == false else {
             connectionManager = nil
             return
         }
@@ -143,7 +143,7 @@ struct BluetoothService {
         }
     }
 
-    public func connect(toPeer peer: ConnectionManager.PeerId) {
+    public func connect(toPeer peer: DistanceManager.PeerID) {
         guard debugUI == false else {
             return
         }
@@ -155,7 +155,7 @@ struct BluetoothService {
         }
     }
 
-    public func disconnect(fromPeer peer: ConnectionManager.PeerId) {
+    public func disconnect(fromPeer peer: DistanceManager.PeerID) {
         guard debugUI == false else {
             return
         }
@@ -186,7 +186,7 @@ struct BluetoothService {
 // MARK: Messaging functions
 
     public func send(
-        toPeer peerId: ConnectionManager.PeerId,
+        toPeer peerId: DistanceManager.PeerID,
         message: String,
         with reliability: MCSessionSendDataMode
     ) async throws {

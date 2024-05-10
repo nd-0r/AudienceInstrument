@@ -8,6 +8,11 @@
 import Foundation
 import MultipeerConnectivity
 
+var isUnitTest : Bool
+{
+    return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+}
+
 @MainActor func createMockConnectionManagerModel() -> ConnectionManagerModel {
     let n = [ // Theoretically available nodes
         /* 0 */ MCPeerID(displayName: "Peer 1"), // connected peer
@@ -36,7 +41,7 @@ import MultipeerConnectivity
         n[5].id:NodeMessageManager(peerId: n[5].id)
     ]
 
-    let estimatedLatencyByPeerInNs: [ConnectionManager.PeerId:UInt64] = [
+    let estimatedLatencyByPeerInNs: [DistanceManager.PeerID:UInt64] = [
         n[1].id: 8_000_135,
         n[2].id: 5_047_300,
         n[3].id: 6_200_140,
@@ -44,7 +49,7 @@ import MultipeerConnectivity
         n[6].id: 10_750_333
     ]
 
-    let estimatedDistanceByPeerInM: [ConnectionManager.PeerId:DistanceManager.PeerDist] = [
+    let estimatedDistanceByPeerInM: [DistanceManager.PeerID:DistanceManager.PeerDist] = [
         n[0].id: .noneCalculated,
         n[1].id: .someCalculated(4.21),
         n[2].id: .someCalculated(1.2),
